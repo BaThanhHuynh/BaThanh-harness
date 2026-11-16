@@ -1,149 +1,104 @@
-# Harness — Agent = Model + Harness (6 tầng)
+# BaThanh Harness — bộ khung kỷ luật cho agent lập trình Claude Code
 
-Dựng lại ngày 10/09/2026, sau khi `~/.claude/harness/` mất trong đợt chuyển máy từ user `adc` sang `dell`.
-**Hợp đồng bằng văn bản** vẫn là `D:\codevstdio\CLAUDE.md` cùng `.claude/rules/01–14`. Thư mục này là
-**phần runtime**: hook, vết phiên, bảng định tuyến — những thứ cưỡng chế được mà văn bản không tự làm được.
+**Agent = Model + Harness.** Model giỏi đến đâu cũng cần một lớp vỏ quy định nó được làm gì, phải kiểm chứng ra sao,
+nhớ gì giữa các phiên và tốn bao nhiêu. Repo này là lớp vỏ đó, viết cho Claude Code và dùng hằng ngày trên các dự án
+thật của tác giả.
 
-## Bản đồ 6 tầng
+- **Một tệp Python duy nhất** (`harness.py`, ~950 dòng), chỉ dùng thư viện chuẩn, không phụ thuộc ngoài.
+- **Gắn vào Claude Code qua hook** (`SessionStart`, `PreToolUse`, `PostToolUse`, `Stop`).
+- **Hợp đồng bằng văn bản** (`codevstdio/CLAUDE.md` + 16 luật trong `codevstdio/.claude/rules/`) nói agent *phải* làm gì;
+  harness **cưỡng chế** những điều văn bản không tự làm được.
+- **Fail-open:** lỗi nội bộ của hook được ghi vào log và thoát mã 0. Harness hỏng không bao giờ làm hỏng phiên làm việc.
 
-| Tầng | Trong kiến trúc gốc | Ở máy này | Cưỡng chế bằng |
-| --- | --- | --- | --- |
-| 1 Guides | AGENTS.md, rule files, constraints | `CLAUDE.md` + 16 rule · `<repo>/AGENTS.md` · `DINH-TUYEN.md` · `NHAC-DINH-TUYEN.md` | CLAUDE.md chỉ được nạp khi cwd nằm dưới `D:\codevstdio`; hook `SessionStart` chèn bản nhắc **chỉ khi cwd nằm ngoài** (11/10 — trước đó chèn trùng ở mọi phiên) |
-| 2 Sensors | linters, tests, validators, LLM-as-judge | Cảm biến cú pháp `.py` (compile) và `.json`/`.ipynb` (parse, bắt cả BOM — §14) sau mỗi Edit/Write | `PostToolUse` → `decision: block`, lỗi đưa thẳng về agent |
-| 3 Agentic loop | plan → execute → verify → fix, retry có giới hạn, trần ngân sách, leo thang | §5 vòng đời, §7 ngắt mạch, §11 trần phiên | Dây ngắt mềm: cùng một lệnh thất bại ≥ 2 lần · mốc **60/120/200** lượt gọi · ngữ cảnh 150K token mỗi lượt · sang tệp thứ 13. **Hộp duyệt** (`PreToolUse` → `ask`, một lần mỗi mốc): ngữ cảnh **200K** token mỗi lượt (bỏ 300K ngày 15/11: autoCompactWindow 200K) |
-| 4 Memory | state files, artifacts, decision log | `<repo>/AGENTS.md`, `docs/knowledge/`, nhật ký phiên của repo · `vet/tong-ket/` | `SessionStart` chèn mục «Tiếp theo» của `trang_thai.md` + tóm tắt phiên trước ở cùng thư mục · `Stop` giữ lượt một lần đòi bàn giao §13 · `harness.py tim` |
-| 5 Permissions | tool access, write limits, approval gates | §9 danh sách cấm cứng · §10 bí mật | `PreToolUse`: lệnh phá huỷ → `ask` · sửa tệp bí mật → `deny` · đọc tệp bí mật → `ask` |
-| 6 Observability | trace logs, cost tracking, trip wires | `vet/phien/<session>.jsonl` · `vet/tong-ket/<session>.json` (token đọc từ transcript) | `PostToolUse` / `PostToolUseFailure` / `Stop` · `harness.py bao-cao` |
+## Vấn đề cần giải quyết
 
-## Đánh giá khả thi (10/09/2026, Claude Code 2.1.260)
+Số đo từ 45 phiên làm việc thật (09–10/2026), đọc trực tiếp từ transcript của Claude Code:
 
-**Khả thi.** Cả sáu tầng đều có cơ chế tương ứng trong Claude Code, và hook đã được kiểm chạy thật trong
-phiên dựng lại. Những giới hạn đã chấp nhận:
-
-- **LLM-as-judge không tự động.** Chạy mỗi lượt thì tốn token và ồn. Chỉ gọi khi cần, qua skill review ở bước REVIEW_DIFF (`DINH-TUYEN.md`).
-- **Cảm biến chỉ kiểm cú pháp.** Không có bộ test chung cho mọi repo. Kiểm chứng ngữ nghĩa vẫn theo `AGENTS.md`
-  của từng repo (với CredX: chạy lại chuỗi dựng số).
-- **Ngân sách không chặn cứng.** Chặn giữa chừng để lại việc dở dang. Từ 11/10 mốc 200K (300K bỏ 15/11) chuyển thành hộp duyệt:
-  nhắc mềm bị bỏ qua ở cả 5 phiên trước đó, nên quyết định được đưa cho người dùng — người thấy chi phí.
-- **Chi phí chỉ đếm bằng token** (vào / cache ghi / cache đọc / ra), không quy ra tiền. Bảng giá thay đổi theo thời gian nên không hardcode.
-- **Cổng quyền dựa trên regex.** Có thể hỏi thừa (ví dụ `echo "rm -rf"`) và bỏ sót lệnh được ngụy trang.
-  Hệ thống quyền của chính Claude Code vẫn là lớp chắn chính.
-- **Hook không đọc được phạm vi «Sẽ sửa» công bố ở bước PLAN** (đó là văn bản), nên dây ngắt phạm vi chỉ đếm số tệp.
-- **Độ dễ hiểu của câu trả lời (§15) không có cảm biến tự động.** Máy khó đo «dễ hiểu» mà không báo nhầm,
-  và bắt agent viết lại mỗi lượt thì tốn kém. Quy tắc nằm ở tầng Guides: luật 15 cộng một dòng trong bản nhắc đầu phiên.
-
-## Tệp
-
-| Tệp | Vai trò |
+| Quan sát | Số đo |
 | --- | --- |
-| `harness.py` | Engine. Hook: `bat-dau` · `canh-cong` · `sau-cong-cu` · `ket-phien`. Chạy tay: `quet` · `bao-cao` · `chi-muc` · `do-ton` · `tim` · `tu-kiem-bat-buoc` |
-| `NHAC-DINH-TUYEN.md` | Chèn vào ngữ cảnh mỗi đầu phiên và sau mỗi lần nén. **Giữ ngắn** — nó tốn ngữ cảnh |
-| `DINH-TUYEN.md` | Việc X → skill nào (soạn tay) |
-| `INVENTORY.md` | Sinh bởi `quet`, không sửa tay |
-| `vet/` | Vết và tổng kết phiên. `loi.log` ghi lỗi nội bộ của hook (hook lỗi thì thoát 0, không làm hỏng phiên) |
-| `sao-luu/2026-09-10/` | Bản gốc của các tệp đã sửa khi dựng lại |
-| `codevstdio/.claude/rules/` | Bản thật của rules hợp đồng; `D:\codevstdio\.claude\rules` là junction trỏ về đây |
-| `codevstdio/CLAUDE.md`, `dot-claude/settings.json` | Bản chép, `githooks/pre-commit` làm mới mỗi lần commit |
+| Phần nạp cố định mỗi lượt gọi (luật, mô tả skill, plugin) | trung vị **~90K token** trước khi agent làm gì |
+| Một phiên dài điển hình | 156 lượt gọi, 285K token mỗi lượt, **44,5 triệu token** cho ~150K token nội dung thật (300:1) |
+| Phần chi phí đến từ việc gửi lại ngữ cảnh cũ | **~57%** (quy theo giá tương đối của API) |
+| Skill thực sự được gọi | 6 lần / 45 phiên, trong khi ~150 mô tả skill nạp lại ở mọi lượt |
+| Kết quả công cụ > 20K ký tự | 46 lần — mỗi lần nằm lại trong ngữ cảnh đến hết phiên |
 
-## Hook đăng ký trong `~/.claude/settings.json`
+Ngoài chi phí còn ba rủi ro: agent **quên** việc dở giữa các phiên, **báo xong mà chưa kiểm chứng**, và chạy **lệnh phá huỷ**
+(`git reset --hard`, `rm -rf`) hoặc đụng vào tệp bí mật.
 
-| Sự kiện | Matcher | Lệnh con |
+## Kiến trúc 6 tầng
+
+| Tầng | Harness làm gì | Cơ chế |
 | --- | --- | --- |
-| `SessionStart` | `startup\|resume\|clear\|compact` | `bat-dau` |
-| `PreToolUse` | `Bash\|PowerShell\|Read\|Edit\|Write\|MultiEdit\|NotebookEdit` | `canh-cong` |
-| `PostToolUse`, `PostToolUseFailure` | `*` | `sau-cong-cu` |
-| `Stop` | — | `ket-phien` |
+| 1. Hướng dẫn | Nạp hợp đồng + bản nhắc rút gọn đầu phiên, bảng «việc X → skill nào» | `SessionStart` chèn ngữ cảnh, chỉ khi hợp đồng chưa tự nạp |
+| 2. Cảm biến | Sau mỗi lần ghi tệp: biên dịch `.py`, parse `.json`/`.ipynb` (bắt cả BOM) | `PostToolUse` trả lỗi thẳng về agent |
+| 3. Vòng lặp | Dây ngắt: cùng một lệnh hỏng ≥ 2 lần, mốc 60/120/200 lượt gọi, ngữ cảnh 150K, sang tệp thứ 13 | Nhắc mềm; ngữ cảnh vượt 200K → hộp duyệt cho người dùng |
+| 4. Bộ nhớ | Đầu phiên chèn mục «Tiếp theo» của `trang_thai.md` + tóm tắt phiên trước; cuối phiên đòi ghi bàn giao | `SessionStart` + `Stop` giữ lượt một lần; lệnh `tim` tra xuyên dự án |
+| 5. Quyền | Lệnh phá huỷ → hỏi; sửa tệp bí mật → chặn; đọc trọn tệp > 200 KB → chặn | `PreToolUse` + `permissions.deny`/`ask` native làm lớp chắn thứ hai |
+| 6. Quan sát | Vết từng lượt gọi, tổng kết token mỗi phiên | `vet/phien/*.jsonl`, `vet/tong-ket/*.json`, lệnh `bao-cao`, `do-ton` |
 
-Mỗi hook là một lần khởi động `python` (~0,1 s mỗi lượt gọi công cụ).
+Thêm một cổng quy trình: agent không được ghi tệp dự án trước khi gọi một skill quy trình (`superpowers:*`), và `Stop` giữ lượt lại nếu đã
+sửa tệp mà chưa chạy bước kiểm chứng (`superpowers:verification-before-completion`).
 
-## Quota — vì sao tốn và đòn bẩy (đo 11/10/2026)
+## Quyết định thiết kế đáng chú ý
 
-Nguồn: transcript `~/.claude/projects/*/*.jsonl` từ 01/09 — 45 phiên chính (CredX 33, DART-ICD-10 12).
+- **Bộ nhớ bằng tệp, không bằng LLM.** Đã thử plugin `claude-mem` (nén quan sát bằng Haiku, lưu SQLite + Chroma):
+  việc nén ăn chung quota với phiên chính, hết quota sau 5 ngày, 88% lượt gọi công cụ không được nén, agent tra cứu
+  0 lần, mỗi đầu phiên chèn tới ~10K token. Thay bằng tệp Markdown trong từng repo (`AGENTS.md`,
+  `docs/knowledge/trang_thai.md`, `nhat_ky/`) do harness nhắc ghi và tự chèn lại — chi phí gần như bằng 0.
+- **Hỏi thay vì chặn cứng ngân sách.** Chặn giữa chừng để lại việc dở dang; nhắc mềm thì bị bỏ qua ở cả 5 phiên đo.
+  Nên ở mốc 200K token, quyết định được đưa cho người dùng — người nhìn thấy chi phí.
+- **Hai lớp quyền.** Cổng regex trong hook có thể sót lệnh ngụy trang, nên các quy tắc quan trọng được lặp lại trong
+  hệ thống quyền native của Claude Code — lớp này vẫn chắn khi hook lỗi.
 
-| Chỉ số | Số đo |
+## Cấu trúc repo
+
+```
+harness.py                  engine: 4 lệnh hook + lệnh chạy tay
+NHAC-DINH-TUYEN.md          bản nhắc chèn đầu phiên (giữ ngắn — nó tốn ngữ cảnh)
+DINH-TUYEN.md               bảng «việc X → skill nào», kèm căn cứ giữ / bỏ từng plugin
+INVENTORY.md                danh mục skill/plugin, sinh bởi `harness.py quet`
+VAN-HANH.md                 ghi chú vận hành: số đo quota, lịch sử thay đổi, cách khôi phục
+codevstdio/CLAUDE.md        hợp đồng 16 mục (bản chép)
+codevstdio/.claude/rules/   16 luật chi tiết: vòng đời tác vụ, ngắt mạch, quyền, bí mật, ngân sách ngữ cảnh…
+dot-claude/settings.json    cấu hình Claude Code: đăng ký hook, quyền, biến môi trường (bản chép)
+githooks/pre-commit         tự chép CLAUDE.md và settings.json vào repo trước mỗi commit
+```
+
+## Cài đặt
+
+Cần Windows, Claude Code và Python 3 (đang chạy trên 3.14). Đường dẫn mặc định theo máy tác giả
+(`D:\codevstdio` cho hợp đồng và repo); muốn dùng chỗ khác thì sửa hằng `HOP_DONG` ở đầu `harness.py`.
+
+```bash
+git clone https://github.com/BaThanhHuynh/BaThanh-harness.git ~/.claude/harness
+git -C ~/.claude/harness config core.hooksPath githooks
+```
+
+1. Gộp khối `hooks` (và nếu muốn, `permissions`) từ `dot-claude/settings.json` vào `~/.claude/settings.json`.
+2. Đặt hợp đồng vào thư mục gốc chứa các dự án: chép `codevstdio/CLAUDE.md`, và nối `codevstdio/.claude/rules`
+   bằng junction (PowerShell):
+   `New-Item -ItemType Junction -Path D:\codevstdio\.claude\rules -Target $HOME\.claude\harness\codevstdio\.claude\rules`
+3. Tự kiểm: `python ~/.claude/harness/harness.py tu-kiem-bat-buoc`
+
+## Lệnh chạy tay
+
+| Lệnh | Việc |
 | --- | --- |
-| CredX: lượt API · ngữ cảnh gửi lại · trung bình mỗi lượt · sinh ra | 2.808 · 642 triệu · **228.632** · 5,0 triệu token |
-| Sàn lượt đầu (phần nạp cố định) | trung vị 90.297; các phiên tháng 10 ~97K token |
-| Chuỗi luật tiếng Việt (CLAUDE.md + 16 rule + AGENTS.md CredX, 46 KB) | ~25K token mỗi lượt — tiếng Việt có dấu ≈ 1,9 byte/token (đo: rule 11+13, 9.628 byte ≈ 5.150 token) |
-| Quy theo giá tương đối API (cache đọc 0,1× · cache ghi 1,25× · output 5×) | đọc lại ngữ cảnh ~57% · output gồm suy nghĩ ~23% · cache ghi ~20% |
-| Skill được gọi | 6 lần / 45 phiên, trong khi ~150 mô tả skill nạp lại mỗi lượt |
-| Kết quả công cụ > 20K ký tự | 46 lần, 5,7 triệu ký tự — nằm lại đến hết phiên |
-| 5 phiên gần nhất | đều vượt 150K và 250K token mỗi lượt; phiên 07/10: 119 lượt, 3 tệp ghi, 32 triệu token cache đọc |
+| `harness.py bao-cao [n]` | Tổng kết n phiên gần nhất: lượt gọi, tệp đã ghi, lệnh hỏng, token |
+| `harness.py do-ton` | Đo chi phí ngữ cảnh của phiên đang chạy |
+| `harness.py tim <từ khoá…>` | Tra xuyên mọi dự án trong `docs/knowledge/` và tổng kết phiên |
+| `harness.py quet` | Quét skill/plugin đang cài, sinh `INVENTORY.md` |
+| `harness.py tu-kiem-bat-buoc` | Tự kiểm các cổng bắt buộc |
 
-Bằng chứng cũ: phiên CredX 20/09 — 156 lượt, 285.133 token/lượt, 44,5 triệu token cho ~150K token nội dung thật
-(300:1); nguyên nhân 43 `Edit` lẻ và một `Read` 183 KB. Phiên dài còn kém chính xác: Chroma Research «context rot»
-(18 model) — độ chính xác tụt khi đầu vào dài ra, trước cả khi chạm giới hạn cửa sổ.
+## Giới hạn đã biết
 
-**Đòn bẩy, theo thứ tự hiệu quả:** (1) phiên ngắn + bàn giao bằng tệp — đánh vào phần 57%; (2) effort `high` mặc
-định, subagent `haiku`/`sonnet` cho việc rẻ — đánh vào phần 23%; (3) gọn phần nạp cố định (luật, plugin, connector)
-— đánh vào sàn ~97K. Đo phiên đang chạy: `harness.py do-ton`; các phiên gần đây: `harness.py bao-cao`.
+- Cảm biến chỉ kiểm cú pháp; kiểm chứng ngữ nghĩa (test, chạy lại số liệu) vẫn theo `AGENTS.md` của từng dự án.
+- Cổng quyền dựa trên regex: có thể hỏi thừa, hoặc sót lệnh được ngụy trang.
+- Chi phí chỉ đếm bằng token, không quy ra tiền (bảng giá thay đổi nên không ghi cứng).
+- Tệp ghi qua lệnh shell không được theo dõi như tệp ghi qua công cụ Edit/Write.
+- Hợp đồng và luật viết bằng tiếng Việt.
 
-**Bộ công cụ chốt 11/10** (giữ / bỏ và căn cứ): `DINH-TUYEN.md`. Tắt `claude-mem`, `caveman`, `ponytail`; gỡ `ecc` —
-ước giảm ~10K token mỗi lượt. **Người dùng tự tắt trong claude.ai → Cài đặt:** 6 plugin đồng bộ (`legal`, `finance`,
-`data`, `productivity`, `engineering`, `cowork-plugin-management`; 17 MCP chờ đăng nhập, `definite` hỏng) và connector
-Claude Docs — thêm ~4,6K. Giữ Google Drive (40 lượt dùng). 15/11: `superpowers` + `ponytail` **bắt buộc** khi làm dự án — luật «1%» áp dụng lại cho hai plugin này (§5, §11).
-Lưu ý: `claude plugin details` ghi hook là «không tốn ngữ cảnh» — sai với hook `SessionStart` có in `additionalContext`
-(caveman, ponytail, superpowers, claude-mem đều in).
+## Tác giả
 
-## MCP server dùng chung
-
-- 11/10/2026: `~/.claude.json` → `mcpServers` **rỗng** — `playwright` (cài 13/09) không còn. Duyệt web dùng trình
-  duyệt tích hợp của app. Cài lại: `cmd /c npx -y @playwright/mcp@latest --output-dir C:/Users/dell/AppData/Local/Temp/playwright-mcp`
-  (cờ `--output-dir` để ảnh chụp khỏi rơi vào repo); MCP chỉ nạp ở phiên mới.
-
-## Vận hành
-
-- Xem các phiên gần đây: `python ~/.claude/harness/harness.py bao-cao [số phiên]`
-- Tra xuyên dự án (mọi `D:\codevstdio\repo\*\docs\knowledge\**` + `vet/tong-ket/`): `python ~/.claude/harness/harness.py tim <từ khoá> [từ khoá …]`
-  — dòng phải chứa mọi từ khoá, không phân biệt hoa thường, tối đa 30 dòng `tệp:dòng: đoạn`.
-- Sau khi cài / gỡ plugin: `python ~/.claude/harness/harness.py quet`, rồi soát lại `DINH-TUYEN.md`.
-- Chỉnh ngưỡng dây ngắt: sửa các hằng số ở đầu `harness.py`.
-- Tắt tạm mọi hook: thêm `"disableAllHooks": true` vào `settings.json`.
-
-## Khôi phục — những gì đã mất và cách lấy lại
-
-- **Sao lưu git (16/11/2026).** Thư mục này là repo git private. Repo public, nên ngoài git: `vet/`, `__pycache__/`,
-  `sao-luu/` (bản cũ, có tài liệu dự án khác — chỉ giữ trên máy). Sao lưu: `git -C ~/.claude/harness add -A`, rồi `commit`, rồi `push`.
-  Máy mới, theo thứ tự:
-  1. `git clone <url repo> ~/.claude/harness` rồi `git -C ~/.claude/harness config core.hooksPath githooks`.
-  2. PowerShell: `New-Item -ItemType Junction -Path D:\codevstdio\.claude\rules -Target $HOME\.claude\harness\codevstdio\.claude\rules`.
-  3. Chép `codevstdio/CLAUDE.md` sang `D:\codevstdio\`.
-  4. Gộp khối `hooks`, `permissions`, `autoMode` từ `dot-claude/settings.json` vào `~/.claude/settings.json`.
-  5. `python ~/.claude/harness/harness.py tu-kiem-bat-buoc`.
-- **Đường dẫn plugin.** `plugins/installed_plugins.json` và `known_marketplaces.json` từng trỏ vào
-  `C:\Users\adc`; đã đổi sang `dell` (bản gốc nằm ở `sao-luu/`). Nếu chuyển máy lần nữa thì làm lại phép thay
-  này. `SessionStart` sẽ tự cảnh báo khi một plugin đang bật bị hỏng đường dẫn.
-- **13/09: Node.js v24.21.0 đã cài; `ecc` và `claude-mem` đã bật lại** (bản `settings.json` trước khi bật:
-  `sao-luu/2026-09-13/settings.json`). Đã chạy THẬT từng hook qua bash với stdin mẫu: `ecc` 12/12 hook mã 0.
-  `claude-mem`: người dùng duyệt `npx claude-mem@latest install --provider claude` (chạy không tương tác thì BẮT
-  BUỘC có `--provider`, không thì trình cài dừng). Nó cài bun 1.4.2 vào `~/.bun/bin` (không vào PATH của shell — plugin
-  tự tìm ở đó), nâng plugin lên v13.24.23, cloud sync TẮT, dữ liệu ở `~/.claude-mem`. Chạy thử lại: hook mã 0, worker
-  `http://127.0.0.1:37777` trả 200. Nếu worker không lên: `npx claude-mem start`. Soát tĩnh (đọc chuỗi lệnh) báo nhầm «thiếu tệp» vì hook
-  của cả hai tự dò đường dẫn lúc chạy — muốn kết luận phải chạy thử, đừng tin soát tĩnh.
-- **15/11: `superpowers` + `ponytail` bắt buộc khi làm dự án** (người dùng chốt); bật lại `ponytail`. Cổng mới trong
-  `harness.py`: `canh-cong` từ chối ghi tệp dự án khi phiên chưa gọi skill `superpowers:*`; `ket-phien` giữ lượt lại một
-  lần nếu đã ghi tệp dự án mà chưa gọi `superpowers:verification-before-completion` sau lần ghi cuối; `bat-dau` cảnh báo
-  khi plugin bắt buộc bị tắt. Tự kiểm: `harness.py tu-kiem-bat-buoc`. Cùng ngày (quota): Opus effort `xhigh` → `high`,
-  `autoCompactWindow` 400K → 200K, `CLAUDE_CODE_SUBAGENT_MODEL=sonnet`. Bản trước khi sửa: `sao-luu/2026-11-15/`.
-- **15/11 (quota, đợt 2):** `canh-cong` từ chối `Read` trọn tệp >200 KB không kèm offset/limit; `env`:
-  `BASH_MAX_OUTPUT_LENGTH=15000`, `MAX_MCP_OUTPUT_TOKENS=10000`; tắt `mattpocock-skills` (0 lần dùng, trùng superpowers).
-  Căn cứ (mọi transcript): Bash ~65%, Read ~23% kết quả công cụ đưa vào ngữ cảnh. Bản trước: `sao-luu/2026-11-15/`.
-- **15/11 (đợt 3, 5 sửa):** `permissions.deny`/`ask` native trong `settings.json` (chặn sửa `.env`/khoá, hỏi trước
-  `git push`/`reset --hard`/`clean`/`rebase`/`branch -D`/`rm -r`, đọc `.env`) — lớp chắn không phụ thuộc hook fail-open;
-  `autoMode.environment` tin mọi repo dưới `D:\codevstdio\repo\`; `NHAC-DINH-TUYEN.md` thêm dòng phân định định dạng;
-  bỏ mốc 300K (không bao giờ chạm vì autoCompactWindow 200K); `main()` ép stdout/stderr UTF-8 (trước đó lệnh chạy tay
-  im lặng do cp1252). Bản trước: `sao-luu/2026-11-15/truoc-5-sua/`.
-- **15/11 (bộ nhớ dài hạn, không gọi LLM, chỉ stdlib — `claude-mem` vẫn TẮT):** `ket-phien` giữ lượt một lần khi phiên đã
-  ghi tệp dưới `D:\codevstdio\repo\<repo>\` mà sau lần ghi cuối chưa ghi `docs/knowledge/trang_thai.md` hoặc `nhat_ky/`
-  (gộp chung một khối với cổng verification; đã giữ thì thôi lời nhắc §13 cũ; phiên chỉ đọc không bị chặn).
-  `vet/tong-ket/<session>.json` thêm `lenh_that_bai`, `prompt_cuoi` (≤200 ký tự, đã che bí mật), `ban_giao_luc`.
-  `bat-dau` ở trong repo chèn ≤ ~15 dòng: mục «Tiếp theo/Next» của `trang_thai.md` (không có thì 1,5 KB đầu), cảnh báo
-  khi `trang_thai.md` > 6 KB hoặc thiếu `AGENTS.md`/`trang_thai.md`, đường dẫn đọc thêm; tóm tắt phiên trước thêm yêu cầu
-  cuối và tệp đã ghi. Lệnh mới `tim`. Hạn chế: tệp ghi qua Bash không được theo dõi. Bản trước: `sao-luu/2026-11-15/truoc-bo-nho/`.
-- **11/10: tắt `claude-mem`, `caveman`, `ponytail`; gỡ hẳn `ecc`** (lý do: `DINH-TUYEN.md` mục «Đã TẮT / GỠ»);
-  effort mặc định Opus `xhigh` → `high`.
-  Bản trước khi sửa: `sao-luu/2026-10-11/`.
-- **CodeGraph.** CLI đã mất, nên hook `codegraph prompt-hook` bị gỡ khỏi `UserPromptSubmit` (trước đó nó lỗi
-  ở mỗi lượt). Cài lại CLI thì thêm lại một nhóm `UserPromptSubmit` gọi `codegraph prompt-hook`.
-- **Không khôi phục được:** nội dung cũ của `DINH-TUYEN.md` / `INVENTORY.md` (343 mục) và các script `.ps1`
-  cũ. Bộ hiện tại được soạn lại từ đặc tả trong rule 11 và từ bộ plugin đang có.
+[BaThanhHuynh](https://github.com/BaThanhHuynh) — thiết kế, đo đạc và vận hành harness trên các dự án cá nhân;
+dựng cùng Claude Code.

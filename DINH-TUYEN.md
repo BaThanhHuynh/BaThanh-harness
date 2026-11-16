@@ -8,7 +8,7 @@
 
 ## Bộ đang bật — chốt 11/10/2026
 
-Căn cứ: số lần dùng thật trong transcript từ 01/09 (45 phiên) và chi phí nạp mỗi lượt — `README.md` mục «Quota».
+Căn cứ: số lần dùng thật trong transcript từ 01/09 (45 phiên) và chi phí nạp mỗi lượt — `VAN-HANH.md` mục «Quota».
 
 | Nguồn | Dùng thật | Giữ vì |
 | --- | --- | --- |

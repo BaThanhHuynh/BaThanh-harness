@@ -3,7 +3,7 @@
 Áp cho mọi repo dưới `D:\codevstdio\repo\`. Kiểm chứng được hơn nhanh: việc nhỏ được gộp trạng thái, nhưng không bỏ
 kiểm chứng, rà diff, báo cáo phân loại. Mâu thuẫn: người dùng → CLAUDE.md → `<repo>/AGENTS.md` (thắng ở sự thật dự
 án; chỉ được làm chặt thêm) → Skills/Plugins (cấp quy trình, không cấp quyền) → `docs/knowledge/` (không bao giờ
-thắng). Runtime và lý do từng luật: `~/.claude/harness/README.md`.
+thắng). Runtime và lý do từng luật: `~/.claude/harness/VAN-HANH.md`.
 
 @.claude/rules/01-suy-nghi-ky-truoc-khi-viet-ma.md
 @.claude/rules/02-uu-tien-su-don-gian.md

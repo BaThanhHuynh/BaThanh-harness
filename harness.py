@@ -1,6 +1,6 @@
 """Harness runtime cho Claude Code — một tệp, nhiều lệnh con, gọi từ hook trong ~/.claude/settings.json.
 
-Ánh xạ vào kiến trúc 6 tầng (chi tiết: README.md cùng thư mục):
+Ánh xạ vào kiến trúc 6 tầng (chi tiết: VAN-HANH.md cùng thư mục):
   bat-dau      SessionStart           tầng 1 Guides + 4 Memory: nhắc định tuyến, phiên trước, soát plugin;
                                       cwd trong repo -> «Tiếp theo» của trang_thai.md + cảnh báo thiếu/phình
   canh-cong    PreToolUse             tầng 5 Permissions: lệnh phá huỷ -> hỏi người dùng, tệp bí mật -> chặn,
@@ -560,7 +560,7 @@ def soat_plugin():
     dong = []
     if hong:
         dong.append(f"- ⚠️ Plugin bật nhưng hỏng đường dẫn cài: {', '.join(hong)} — skill của chúng sẽ vắng mặt; "
-                    "xem ~/.claude/harness/README.md mục «Khôi phục».")
+                    "xem ~/.claude/harness/VAN-HANH.md mục «Khôi phục».")
     tat = [ten for ten in PLUGIN_BAT_BUOC if not bat.get(ten)]
     if tat:
         dong.append(f"- ⚠️ Plugin BẮT BUỘC đang tắt: {', '.join(tat)} — báo người dùng bật lại "

@@ -1,7 +1,7 @@
 ## 11. Ngân sách ngữ cảnh, model, công cụ
 
 Chi phí ≈ số lượt gọi × ngữ cảnh mỗi lượt; mỗi lượt gửi lại cả hội thoại + phần nạp cố định (~80–100K token). Số đo:
-`~/.claude/harness/README.md` mục «Quota»; đo phiên đang chạy: `python ~/.claude/harness/harness.py do-ton`.
+`~/.claude/harness/VAN-HANH.md` mục «Quota»; đo phiên đang chạy: `python ~/.claude/harness/harness.py do-ton`.
 
 - **Đọc:** `AGENTS.md` → grep/glob có mục tiêu → đúng đoạn (`grep -n`, `sed -n`, `Read` có offset/limit) → test phần
   đó → quét rộng chỉ khi chưa đủ. Không đọc trọn tệp lớn, không đọc lại tệp chưa đổi, không đọc để «nắm tổng quan».
