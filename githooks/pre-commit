@@ -1,0 +1,6 @@
+#!/bin/sh
+# Junction chỉ nối được thư mục, nên hai tệp lẻ này được chép vào repo trước mỗi commit.
+mkdir -p dot-claude
+cp /d/codevstdio/CLAUDE.md codevstdio/CLAUDE.md
+cp "$HOME/.claude/settings.json" dot-claude/settings.json
+git add codevstdio/CLAUDE.md dot-claude/settings.json

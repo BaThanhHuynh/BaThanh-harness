@@ -1,0 +1,5 @@
+vet/
+__pycache__/
+*.tmp
+# repo public: bản sao lưu cũ có tài liệu dự án khác và ~/.claude.json — chỉ giữ trên máy
+sao-luu/
