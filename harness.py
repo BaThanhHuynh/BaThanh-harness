@@ -15,9 +15,12 @@
 
 Lỗi nội bộ của hook bị nuốt (ghi vet/loi.log) và thoát 0 — harness hỏng không được làm hỏng phiên.
 """
+import hashlib
 import json
 import os
 import re
+import shlex
+import statistics
 import sys
 import traceback
 from datetime import datetime
@@ -30,6 +33,7 @@ VET_TONG_KET = GOC / "vet" / "tong-ket"  # tổng kết mỗi phiên, ghi đè �
 LOG_LOI = GOC / "vet" / "loi.log"
 
 NGUONG_THAT_BAI = 2        # §7: cùng một lệnh thất bại từ lần thứ 2 -> DỪNG
+NGUONG_LAP = 5             # §7/§11: 5 lượt liền giống hệt (kể cả thành công) -> nhắc; ngưỡng 3 báo nhầm (ECC)
 MOC_LUOT_GOI = (60, 120, 200)   # mốc ngân sách lượt gọi công cụ mỗi phiên
 MOC_NGU_CANH = (150_000,)  # mốc nhắc mềm: token gửi lại MỖI lượt
 # Mốc hộp duyệt. Nhắc mềm 150K/250K/350K bị bỏ qua ở cả 5 phiên trước 11/10 => chuyển quyết định sang người dùng.
@@ -65,9 +69,19 @@ LENH_PHA_HUY = [
     (re.compile(r"\b(rmdir|rd)\s+/s\b", _I), "rmdir /s"),
     (re.compile(r"\bnpm\s+(install|i)\b[^;&|\n]*\s(-g|--global)\b", _I), "npm install -g"),
     (re.compile(r"\b(setx|Set-ExecutionPolicy|reg\s+(add|delete))\b", _I), "đổi cấu hình hệ thống"),
+]
+# Hai luật về tệp đích .env dò trên chuỗi thô (không tách lệnh): hỏi thừa còn hơn sót.
+LENH_TEP_ENV = [
     (re.compile(r"(>|Out-File|Set-Content|Add-Content)[^;|\n]*\.env(?![\w.])", _I), "ghi vào .env"),
     (re.compile(r"\b(cat|type|Get-Content|gc|head|tail|less|more)\s[^;|\n]*\.env(?![\w.])", _I), "in .env ra output"),
 ]
+LENH_DU_LIEU = {"echo", "printf", "grep", "rg", "findstr", "select-string", "write-output", "write-host"}
+GIT_AN_THAM_SO = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}  # tuỳ chọn toàn cục ăn thêm một token
+VO_SHELL = {"bash", "sh", "cmd", "powershell", "pwsh"}
+CO_VO_SHELL = {"-c", "-command", "/c"}
+THONG_DICH = VO_SHELL | {"iex", "invoke-expression", "eval", "source", "xargs"}  # có mặt -> tham số lệnh dữ liệu cũng là lệnh
+# Cổng quy trình tắt được bằng HARNESS_TAT=a,b (để có nhánh «off» khi đo); bi-mat-*, pha-huy thì không.
+CONG_TAT_DUOC = ("superpowers", "doc-lon", "ngu-canh", "xac-minh", "ban-giao")
 MAU_PIP = re.compile(r"\bpip3?(\.exe)?\s+install\b|-m\s+pip\s+install\b", _I)
 MAU_CO_VENV = re.compile(r"venv|conda|virtualenv|\buv\s+pip\b", _I)
 MAU_BI_MAT = (
@@ -197,15 +211,73 @@ def thieu_ban_giao(goi):
 
 # ---------------------------------------------------------------- tầng 5: cổng quyền
 
-def quyet_dinh(loai, ly_do):
+def ghi_cong(vao, cong, quyet):
+    """Ghi vết một lần cổng bắn (đo bằng `do-cong`). Cổng quy trình nằm trong HARNESS_TAT -> ghi «tat», trả False."""
+    tat = cong in CONG_TAT_DUOC and cong in {c.strip() for c in os.environ.get("HARNESS_TAT", "").split(",")}
+    try:
+        ghi_vet(vao.get("session_id", ""), {"t": bay_gio(), "loai": "cong", "cong": cong, "quyet": "tat" if tat else quyet,
+                                             "cong_cu": vao.get("tool_name", ""),
+                                             "tom_tat": tom_tat(vao.get("tool_name", ""), vao.get("tool_input") or {})})
+    except OSError:
+        pass  # vết hỏng không được làm câm cổng an ninh
+    return not tat
+
+
+def quyet_dinh(vao, cong, loai, ly_do):
+    """Trả True nếu đã hỏi / chặn; False nếu cổng đang tắt (cổng sau trong chuỗi vẫn được xét)."""
+    if not ghi_cong(vao, cong, loai):
+        return False
     xuat({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                  "permissionDecision": loai, "permissionDecisionReason": ly_do}})
+    return True
 
 
 def canh_cong():
     vao = doc_dau_vao()
     if not cong_quyen(vao) and not cong_superpowers(vao) and not cong_doc_lon(vao):
         cong_ngu_canh(vao)
+
+
+def _ten(t):
+    """Tên lệnh của một token: bỏ `$(`, thư mục, `.exe`, chữ thường."""
+    return re.split(r"[\\/]", t.lstrip("$(`"))[-1].lower().removesuffix(".exe")
+
+
+def phan_tich_lenh(lenh):
+    """Nhãn LENH_PHA_HUY khớp, xét từng đoạn (; & |): bỏ tuỳ chọn toàn cục của git, bỏ qua tham số của lệnh
+    dữ liệu (echo, grep…) trừ khi có `(`, `` ` `` hoặc cả lệnh có trình thông dịch (`| sh`, `iex`), đệ quy vào
+    bash/cmd/powershell -c. Ngoặc không đóng -> regex thô."""
+    try:
+        lex = shlex.shlex(lenh.replace("\n", ";"), posix=True, punctuation_chars=";&|")
+        lex.whitespace_split, lex.escape = True, ""  # giữ `\` của đường dẫn Windows
+        lex.commenters = ""  # `\n` đã thành `;`: để `#` nuốt thì lọt cả các dòng sau
+        tu = list(lex)
+    except ValueError:
+        return [n for m, n in LENH_PHA_HUY if m.search(lenh)]
+    chay_chuoi = any(_ten(x) in THONG_DICH for x in tu)  # echo 'git push' | sh
+    nhan, doan = [], []
+    for t in tu + [";"]:
+        if not t or t.strip(";&|"):
+            doan.append(t)
+            continue
+        ten = [_ten(x) for x in doan]
+        co = next((i for i, x in enumerate(doan) if x.lower() in CO_VO_SHELL), 0)
+        if ten and ten[0] in VO_SHELL and co:
+            nhan += phan_tich_lenh(" ".join(doan[co + 1:]))
+        elif ten and (ten[0] not in LENH_DU_LIEU or chay_chuoi or any("(" in x or "`" in x for x in doan)):
+            chuan, sau_git, an = [], False, 0
+            for x, n in zip(doan, ten):
+                if an:
+                    an -= 1
+                elif sau_git and x.startswith("-"):
+                    an = 1 if x in GIT_AN_THAM_SO else 0
+                else:
+                    sau_git = n == "git"
+                    chuan.append("git" if sau_git else x)
+            s = " ".join(chuan)
+            nhan += [n for m, n in LENH_PHA_HUY if m.search(s)]
+        doan = []
+    return list(dict.fromkeys(nhan))
 
 
 def cong_quyen(vao):
@@ -216,18 +288,15 @@ def cong_quyen(vao):
         if not p or not la_tep_bi_mat(p):
             return False
         if ten == "Read":
-            quyet_dinh("ask", f"[HARNESS §10] `{Path(p).name}` là tệp bí mật — đọc vào là đưa khoá vào ngữ cảnh. Chỉ đọc khi người dùng duyệt.")
-        else:
-            quyet_dinh("deny", f"[HARNESS §10] `{Path(p).name}` là tệp bí mật — agent không sửa. Cần đổi thì báo người dùng tự đổi.")
-        return True
+            return quyet_dinh(vao, "bi-mat-doc", "ask", f"[HARNESS §10] `{Path(p).name}` là tệp bí mật — đọc vào là đưa khoá vào ngữ cảnh. Chỉ đọc khi người dùng duyệt.")
+        return quyet_dinh(vao, "bi-mat-ghi", "deny", f"[HARNESS §10] `{Path(p).name}` là tệp bí mật — agent không sửa. Cần đổi thì báo người dùng tự đổi.")
     if ten in CONG_CU_LENH:
         lenh = tham_so.get("command", "")
-        ly_do = [nhan for mau, nhan in LENH_PHA_HUY if mau.search(lenh)]
+        ly_do = phan_tich_lenh(lenh) + [nhan for mau, nhan in LENH_TEP_ENV if mau.search(lenh)]
         if MAU_PIP.search(lenh) and not MAU_CO_VENV.search(lenh):
             ly_do.append("pip install ngoài venv")
         if ly_do:
-            quyet_dinh("ask", f"[HARNESS §9] Lệnh thuộc nhóm DESTRUCTIVE ({', '.join(ly_do)}) — chỉ chạy khi người dùng duyệt đích danh lần này.")
-            return True
+            return quyet_dinh(vao, "pha-huy", "ask", f"[HARNESS §9] Lệnh thuộc nhóm DESTRUCTIVE ({', '.join(ly_do)}) — chỉ chạy khi người dùng duyệt đích danh lần này.")
     return False
 
 
@@ -238,10 +307,10 @@ def cong_superpowers(vao):
     p = duong_dan_tep(tham_so) if ten in CONG_CU_GHI else ""
     if not p or not la_tep_du_an(p) or any(goi_skill(b, "superpowers:") for b in doc_vet(vao.get("session_id", ""))):
         return False
-    quyet_dinh("deny", "[HARNESS §5] Phiên chưa gọi skill superpowers nào — bắt buộc trước khi ghi tệp dự án. Gọi `Skill` "
-                       "khớp trạng thái: superpowers:brainstorming / writing-plans (PLAN), test-driven-development / "
-                       "executing-plans (IMPLEMENT), systematic-debugging (lỗi) — rồi ghi lại.")
-    return True
+    return quyet_dinh(vao, "superpowers", "deny",
+                      "[HARNESS §5] Phiên chưa gọi skill superpowers nào — bắt buộc trước khi ghi tệp dự án. Gọi `Skill` "
+                      "khớp trạng thái: superpowers:brainstorming / writing-plans (PLAN), test-driven-development / "
+                      "executing-plans (IMPLEMENT), systematic-debugging (lỗi) — rồi ghi lại.")
 
 
 def cong_doc_lon(vao):
@@ -251,9 +320,9 @@ def cong_doc_lon(vao):
     if (vao.get("tool_name") != "Read" or any(k in tham_so for k in ("offset", "limit", "pages"))
             or p.suffix.lower() in DUOI_NHI_PHAN or not p.is_file() or p.stat().st_size <= NGUONG_DOC_LON):
         return False
-    quyet_dinh("deny", f"[HARNESS §11] `{p.name}` {p.stat().st_size // 1000} KB — đọc trọn sẽ nằm lại trong ngữ cảnh đến "
-                       "hết phiên. Tìm vị trí bằng `grep -n` rồi Read có offset/limit; cần cả tệp thì gọi lại kèm limit tường minh.")
-    return True
+    return quyet_dinh(vao, "doc-lon", "deny",
+                      f"[HARNESS §11] `{p.name}` {p.stat().st_size // 1000} KB — đọc trọn sẽ nằm lại trong ngữ cảnh đến "
+                      "hết phiên. Tìm vị trí bằng `grep -n` rồi Read có offset/limit; cần cả tệp thì gọi lại kèm limit tường minh.")
 
 
 def cong_ngu_canh(vao):
@@ -267,7 +336,7 @@ def cong_ngu_canh(vao):
     if any(b.get("khoa") == khoa for b in doc_vet(sid) if b.get("loai") == "day-ngat"):
         return
     ghi_vet(sid, {"t": bay_gio(), "loai": "day-ngat", "khoa": khoa})
-    quyet_dinh("ask", f"[HARNESS §11] Ngữ cảnh đã {ctx:,} token MỖI lượt gọi (mốc {moc // 1000}K) — mỗi lượt từ đây "
+    quyet_dinh(vao, "ngu-canh", "ask", f"[HARNESS §11] Ngữ cảnh đã {ctx:,} token MỖI lượt gọi (mốc {moc // 1000}K) — mỗi lượt từ đây "
                       "tốn ít nhất ngần ấy. Cho phép = làm tiếp phiên này. Từ chối = agent ghi bàn giao vào "
                       "docs/knowledge/nhat_ky/ + trang_thai.md rồi đưa câu lệnh để mở phiên mới.")
 
@@ -309,7 +378,9 @@ def sau_cong_cu():
 
     truoc = doc_vet(sid)
     goi = [b for b in truoc if b.get("loai") == "goi"]
-    ban_ghi = {"t": bay_gio(), "loai": "goi", "cong_cu": ten, "ok": ok, "tom_tat": tom_tat(ten, tham_so)}
+    ban_ghi = {"t": bay_gio(), "loai": "goi", "cong_cu": ten, "ok": ok, "tom_tat": tom_tat(ten, tham_so),
+               "ky": hashlib.sha1((ten + json.dumps(tham_so, sort_keys=True, ensure_ascii=False, default=str))
+                                  .encode("utf-8")).hexdigest()[:12]}
     if not truoc:
         ban_ghi["cwd"] = vao.get("cwd", "")
     tep = duong_dan_tep(tham_so) if ten in CONG_CU_GHI and ok else ""
@@ -318,6 +389,12 @@ def sau_cong_cu():
     ghi_vet(sid, ban_ghi)
 
     canh_bao = []  # (khoá, thông điệp)
+    da_ban = {b.get("khoa") for b in truoc if b.get("loai") == "day-ngat"}
+    # Dây ngắt 0 — vòng lặp: NGUONG_LAP lượt liền cùng công cụ + tham số, kể cả lượt thành công.
+    ky = ban_ghi["ky"]
+    if [b.get("ky") for b in goi[-(NGUONG_LAP - 1):]] == [ky] * (NGUONG_LAP - 1) and f"lap-{ky}" not in da_ban:
+        canh_bao.append((f"lap-{ky}", f"Cùng một lượt gọi đã lặp {NGUONG_LAP} lần liền — có thể đang vòng lặp. "
+                                      "§7: đổi cách tiếp cận hoặc báo người dùng; §11: đừng đọc lại tệp chưa đổi."))
     # Dây ngắt 1 — §7 ngắt mạch: cùng một lệnh thất bại lặp lại.
     if not ok and ten in CONG_CU_LENH:
         lan = 1 + sum(1 for b in goi if not b.get("ok") and b.get("tom_tat") == ban_ghi["tom_tat"])
@@ -333,7 +410,6 @@ def sau_cong_cu():
     # thước đo chi phí thật; đếm lượt gọi không phân biệt được phiên 50K với phiên 350K mỗi lượt.
     ctx = ngu_canh_gan_nhat(vao.get("transcript_path", ""))
     if ctx:
-        da_ban = {b.get("khoa") for b in truoc if b.get("loai") == "day-ngat"}
         for moc in MOC_NGU_CANH:
             khoa = f"ngu-canh-{moc // 1000}k"
             if ctx >= moc and khoa not in da_ban:
@@ -469,9 +545,13 @@ def ket_phien():
     }
     dung = vao.get("stop_hook_active")
     chan = 0 if dung else thieu_xac_minh(goi)
+    if chan and not ghi_cong(vao, "xac-minh", "block"):
+        chan = 0
     repo_no = [] if dung or so_ghi_repo <= tk["ban_giao_luc"] else thieu_ban_giao(goi)
     if repo_no:
         tk["ban_giao_luc"] = so_ghi_repo
+    if repo_no and not ghi_cong(vao, "ban-giao", "block"):
+        repo_no = []
     nhac = not (chan or repo_no or dung or tk["ban_giao_luc"]) and len(tep) > tk["so_tep_luc_nhac"]
     if nhac:
         tk["so_tep_luc_nhac"] = len(tep)
@@ -768,6 +848,44 @@ def bao_cao():
           f"{sum((t.get('token') or {}).get('ra', 0) for t in ds):,} token ra.")
 
 
+def luot_qua(b, sau):
+    """Thứ tự (trong các lượt `goi` sau lần cổng bắn `b`) của lượt đầu chạy được đúng công cụ + đích ấy; None nếu không."""
+    goi = [x for x in sau if x.get("loai") == "goi"]
+    return next((k for k, x in enumerate(goi) if x.get("ok") and x.get("cong_cu") == b.get("cong_cu")
+                 and x.get("tom_tat") == b["tom_tat"]), None)
+
+
+def do_cong():
+    """`harness.py do-cong` — mỗi cổng: số lần bắn, số phiên bị bắn, số lần tắt, số lần sau đó chính lệnh/tệp ấy chạy
+    được («qua») và trung vị số lượt gọi từ lúc bắn đến lúc qua (0 = người dùng duyệt ngay)."""
+    sys.stdout.reconfigure(encoding="utf-8")
+    tep = sorted(VET_PHIEN.glob("*.jsonl"))
+    so = {}  # cổng -> [bắn, {phiên}, tắt, qua, [lượt vòng]]
+    for p in tep:
+        vet = doc_vet(p.stem)
+        for i, b in enumerate(vet):
+            if b.get("loai") != "cong":
+                continue
+            s = so.setdefault(b.get("cong", "?"), [0, set(), 0, 0, []])
+            if b.get("quyet") == "tat":
+                s[2] += 1
+                continue
+            s[0] += 1
+            s[1].add(p.stem)
+            if b.get("tom_tat"):
+                j = luot_qua(b, vet[i + 1:])
+                if j is not None:
+                    s[3] += 1
+                    s[4].append(j)
+    if not so:
+        print(f"Chưa có dòng vết cổng nào trong {len(tep)} phiên.")
+        return
+    print(f"{'Cổng':<12} {'Bắn':>5} {'Phiên':>9} {'Tắt':>5} {'Qua':>5}  Trung vị lượt vòng")
+    for c, (ban, ph, tat, qua, luot) in sorted(so.items()):
+        print(f"{c:<12} {ban:>5} {f'{len(ph)}/{len(tep)}':>9} {tat:>5} {qua:>5}  "
+              f"{statistics.median(luot) if luot else '—'}")
+
+
 def tim():
     """`harness.py tim <từ khoá> [từ khoá …]` — tra xuyên dự án trong <repo>/docs/knowledge/** và vet/tong-ket/.
 
@@ -854,9 +972,9 @@ def tu_kiem_bat_buoc():
     tam = Path(tempfile.mkdtemp(prefix="tu_kiem_"))
     lon = tam / "doc_lon.txt"
 
-    def chay(lenh, *ts, **vao):
+    def chay(lenh, *ts, _env=None, **vao):
         r = subprocess.run([sys.executable, __file__, lenh, *ts], capture_output=True, check=True,
-                           input=json.dumps({"session_id": sid, **vao}).encode("utf-8"))
+                           input=json.dumps({"session_id": sid, **vao}).encode("utf-8"), env={**os.environ, **(_env or {})})
         return r.stdout.decode("utf-8")
 
     def ghi(p):
@@ -867,6 +985,31 @@ def tu_kiem_bat_buoc():
 
     g = lambda p: {"loai": "goi", "tep": str(p)}
     try:
+        # Hàm thuần: tách lệnh shell §9.
+        hoi = ["git -C repo push", "git --no-pager push origin main", "git -c core.x=1 reset --hard", "git push",
+               "rm -rf x", 'bash -c "git -C r push"', "echo $(git push)", 'echo "a" && git -C r push 2>&1',
+               r"Remove-Item -Recurse D:\x\y", '"C:/Program Files/Git/cmd/git.exe" -C r push', "git add .\ngit push",
+               "f() { # chu thich\nrm -rf x\n}", "# ghi chu\nrm -rf y", "printf 'git push' | sh",
+               "echo 'rm -rf x' | bash", "echo git push | Invoke-Expression", "echo 'git push' > a.sh; bash a.sh",
+               'git push "x']  # ca cuối: ngoặc không đóng -> regex cũ
+        for s in hoi:
+            assert phan_tich_lenh(s), f"lọt lệnh phá huỷ: {s!r}"
+        for s in ['echo "rm -rf la lenh nguy hiem"', 'grep -n "git push" README.md', "git -C repo status"]:
+            assert not phan_tich_lenh(s), f"hỏi thừa: {s!r}"
+        # Vết hỏng (tệp bị khoá, đĩa đầy) không được làm câm cổng an ninh.
+        goc = ghi_vet
+        def hong(*_):
+            raise OSError("khoá")
+        globals()["ghi_vet"] = hong
+        try:
+            con = ghi_cong({}, "pha-huy", "ask")
+        except OSError:
+            con = False
+        finally:
+            globals()["ghi_vet"] = goc
+        assert con, "ghi vết hỏng làm câm cổng an ninh"
+        assert luot_qua({"cong_cu": "Write", "tom_tat": "f"}, [{"loai": "goi", "cong_cu": "Read", "ok": True, "tom_tat": "f"},
+                        {"loai": "goi", "cong_cu": "Write", "ok": True, "tom_tat": "f"}]) == 1, "Read cùng tệp tính là «qua»"
         # Hàm thuần: bàn giao §13 và mục «Tiếp theo».
         assert thieu_ban_giao([g(du_an)]) == ["_tu_kiem"], "ghi tệp repo mà không đòi bàn giao"
         assert thieu_ban_giao([g(du_an), g(goc_gia / "docs/knowledge/nhat_ky/2026-11-15.md")]) == [], "đã ghi nhật ký mà vẫn đòi"
@@ -881,13 +1024,22 @@ def tu_kiem_bat_buoc():
         assert "viec A" in "\n".join(bn) and len(bn) <= 15, bn
         assert any("6 KB" in d and "AGENTS.md" in d for d in bn), "thiếu cảnh báo trang_thai > 6 KB / thiếu AGENTS.md"
         # Cổng qua hook thật.
+        lenh = lambda c: {"tool_name": "Bash", "tool_input": {"command": c}}
+        assert "ghi vào .env" in chay("canh-cong", **lenh("echo x > .env")), "sót ghi .env"
+        assert "in .env" in chay("canh-cong", **lenh("cat .env")), "sót in .env"
         assert '"deny"' in chay("canh-cong", **ghi(du_an)), "chưa gọi superpowers mà ghi tệp dự án vẫn lọt"
+        cong = lambda ten, q: any(b.get("loai") == "cong" and b.get("cong") == ten and b.get("quyet") == q for b in doc_vet(sid))
+        assert cong("superpowers", "deny"), "cổng bắn mà không ghi vết"
+        assert chay("canh-cong", _env={"HARNESS_TAT": "doc-lon, superpowers"}, **ghi(du_an)) == "", "tắt cổng mà vẫn chặn"
+        assert cong("superpowers", "tat"), "cổng tắt mà không ghi «lẽ ra đã bắn»"
+        assert '"ask"' in chay("canh-cong", _env={"HARNESS_TAT": "pha-huy"}, **lenh("git push")), "tắt được cổng an ninh"
         assert chay("canh-cong", **ghi(ngoai)) == "", "tệp ngoài dự án bị chặn nhầm"
         chay("sau-cong-cu", **skill("superpowers:writing-plans"))
         assert chay("canh-cong", **ghi(du_an)) == "", "đã gọi superpowers mà vẫn bị chặn"
         chay("sau-cong-cu", **ghi(du_an))
         o = chay("ket-phien")
         assert '"block"' in o and SKILL_XAC_MINH in o and "§13" in o, "thiếu verification + bàn giao mà không giữ gộp một lần"
+        assert cong("xac-minh", "block") and cong("ban-giao", "block"), "giữ lượt ở Stop mà không ghi vết"
         assert chay("ket-phien", stop_hook_active=True) == "", "giữ lượt lặp vô hạn"
         chay("sau-cong-cu", **skill(SKILL_XAC_MINH))
         assert '"block"' not in chay("ket-phien"), "đã nhắc bàn giao cho lần ghi này rồi mà vẫn giữ lần hai"
@@ -914,6 +1066,11 @@ def tu_kiem_bat_buoc():
         doc = lambda **ts: {"tool_name": "Read", "tool_input": {"file_path": str(lon), **ts}}
         assert "§11" in chay("canh-cong", **doc()), "đọc trọn tệp lớn mà không bị chặn"
         assert chay("canh-cong", **doc(limit=50)) == "", "đọc có limit mà vẫn bị chặn"
+        assert "superpowers" in chay("do-cong"), "do-cong không thấy cổng của phiên giả"
+        doc_lai = lambda **ts: {"tool_name": "Read", "tool_input": {"file_path": du_an, **ts}}
+        o = [chay("sau-cong-cu", **doc_lai()) for _ in range(5)]
+        assert "vòng lặp" not in o[3] and "vòng lặp" in o[4], "5 lượt giống hệt mà không cảnh báo"
+        assert not any("vòng lặp" in chay("sau-cong-cu", **doc_lai(offset=i)) for i in range(5)), "khác offset mà báo lặp"
         print("tự kiểm bắt buộc: đạt.")
     finally:
         tep_vet(sid).unlink(missing_ok=True)
@@ -922,7 +1079,7 @@ def tu_kiem_bat_buoc():
 
 
 LENH = {"bat-dau": bat_dau, "canh-cong": canh_cong, "sau-cong-cu": sau_cong_cu,
-        "ket-phien": ket_phien, "quet": quet, "bao-cao": bao_cao,
+        "ket-phien": ket_phien, "quet": quet, "bao-cao": bao_cao, "do-cong": do_cong,
         "chi-muc": chi_muc, "do-ton": do_ton, "tim": tim, "tu-kiem-bat-buoc": tu_kiem_bat_buoc}
 
 
@@ -938,7 +1095,7 @@ def main():
     try:
         ham()
     except Exception:
-        if ham in (quet, bao_cao, chi_muc, do_ton, tim, tu_kiem_bat_buoc):
+        if ham in (quet, bao_cao, do_cong, chi_muc, do_ton, tim, tu_kiem_bat_buoc):
             raise
         LOG_LOI.parent.mkdir(parents=True, exist_ok=True)
         with LOG_LOI.open("a", encoding="utf-8") as f:

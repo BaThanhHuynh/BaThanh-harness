@@ -31,7 +31,7 @@ Ngoài chi phí còn ba rủi ro: agent **quên** việc dở giữa các phiên
 | --- | --- | --- |
 | 1. Hướng dẫn | Nạp hợp đồng + bản nhắc rút gọn đầu phiên, bảng «việc X → skill nào» | `SessionStart` chèn ngữ cảnh, chỉ khi hợp đồng chưa tự nạp |
 | 2. Cảm biến | Sau mỗi lần ghi tệp: biên dịch `.py`, parse `.json`/`.ipynb` (bắt cả BOM) | `PostToolUse` trả lỗi thẳng về agent |
-| 3. Vòng lặp | Dây ngắt: cùng một lệnh hỏng ≥ 2 lần, mốc 60/120/200 lượt gọi, ngữ cảnh 150K, sang tệp thứ 13 | Nhắc mềm; ngữ cảnh vượt 200K → hộp duyệt cho người dùng |
+| 3. Vòng lặp | Dây ngắt: 5 lượt gọi giống hệt liền nhau (kể cả thành công), cùng một lệnh hỏng ≥ 2 lần, mốc 60/120/200 lượt gọi, ngữ cảnh 150K, sang tệp thứ 13 | Nhắc mềm; ngữ cảnh vượt 200K → hộp duyệt cho người dùng |
 | 4. Bộ nhớ | Đầu phiên chèn mục «Tiếp theo» của `trang_thai.md` + tóm tắt phiên trước; cuối phiên đòi ghi bàn giao | `SessionStart` + `Stop` giữ lượt một lần; lệnh `tim` tra xuyên dự án |
 | 5. Quyền | Lệnh phá huỷ → hỏi; sửa tệp bí mật → chặn; đọc trọn tệp > 200 KB → chặn | `PreToolUse` + `permissions.deny`/`ask` native làm lớp chắn thứ hai |
 | 6. Quan sát | Vết từng lượt gọi, tổng kết token mỗi phiên | `vet/phien/*.jsonl`, `vet/tong-ket/*.json`, lệnh `bao-cao`, `do-ton` |
@@ -85,6 +85,7 @@ git -C ~/.claude/harness config core.hooksPath githooks
 | Lệnh | Việc |
 | --- | --- |
 | `harness.py bao-cao [n]` | Tổng kết n phiên gần nhất: lượt gọi, tệp đã ghi, lệnh hỏng, token |
+| `harness.py do-cong` | Mỗi cổng: số lần bắn, số phiên bị bắn, số lần tắt, số lần sau đó chạy được, trung vị lượt vòng |
 | `harness.py do-ton` | Đo chi phí ngữ cảnh của phiên đang chạy |
 | `harness.py tim <từ khoá…>` | Tra xuyên mọi dự án trong `docs/knowledge/` và tổng kết phiên |
 | `harness.py quet` | Quét skill/plugin đang cài, sinh `INVENTORY.md` |
@@ -93,7 +94,11 @@ git -C ~/.claude/harness config core.hooksPath githooks
 ## Giới hạn đã biết
 
 - Cảm biến chỉ kiểm cú pháp; kiểm chứng ngữ nghĩa (test, chạy lại số liệu) vẫn theo `AGENTS.md` của từng dự án.
-- Cổng quyền dựa trên regex: có thể hỏi thừa, hoặc sót lệnh được ngụy trang.
+- Cổng lệnh phá huỷ tách lệnh bằng `shlex` (bỏ tuỳ chọn toàn cục của git, bỏ qua tham số của `echo`/`grep` trừ khi
+  cả lệnh có trình thông dịch như `| sh`, `iex`, phân tích lại chuỗi trong `bash -c`); ngoặc không đóng thì quay về
+  regex trên chuỗi thô. Chưa xử lý `env`/`sudo` đứng trước lệnh, `cmd /c"…"` viết dính, `. script` của shell; lồng
+  `bash -c` quá sâu thì hook lỗi và để lệnh qua (fail-open). Lệnh ngụy trang kỹ hơn vẫn có thể lọt — lớp
+  `permissions` native là lớp chắn thứ hai.
 - Chi phí chỉ đếm bằng token, không quy ra tiền (bảng giá thay đổi nên không ghi cứng).
 - Tệp ghi qua lệnh shell không được theo dõi như tệp ghi qua công cụ Edit/Write.
 - Hợp đồng và luật viết bằng tiếng Việt.

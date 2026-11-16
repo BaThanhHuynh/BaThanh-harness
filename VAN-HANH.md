@@ -99,6 +99,10 @@ Lưu ý: `claude plugin details` ghi hook là «không tốn ngữ cảnh» — 
 - Sau khi cài / gỡ plugin: `python ~/.claude/harness/harness.py quet`, rồi soát lại `DINH-TUYEN.md`.
 - Chỉnh ngưỡng dây ngắt: sửa các hằng số ở đầu `harness.py`.
 - Tắt tạm mọi hook: thêm `"disableAllHooks": true` vào `settings.json`.
+- Tắt từng cổng quy trình (để có nhánh «tắt» khi đo): đặt `"HARNESS_TAT": "superpowers,doc-lon"` trong khối `env` của
+  `~/.claude/settings.json`, mở phiên mới. Tắt được: `superpowers`, `doc-lon`, `ngu-canh`, `xac-minh`, `ban-giao`; ba
+  cổng an ninh (`bi-mat-doc`, `bi-mat-ghi`, `pha-huy`) bỏ qua biến này. Cổng tắt vẫn ghi vết `quyet: "tat"`.
+- Xem cổng tốn bao nhiêu: `python ~/.claude/harness/harness.py do-cong`.
 
 ## Khôi phục — những gì đã mất và cách lấy lại
 
@@ -120,6 +124,10 @@ Lưu ý: `claude plugin details` ghi hook là «không tốn ngữ cảnh» — 
   tự tìm ở đó), nâng plugin lên v13.24.23, cloud sync TẮT, dữ liệu ở `~/.claude-mem`. Chạy thử lại: hook mã 0, worker
   `http://127.0.0.1:37777` trả 200. Nếu worker không lên: `npx claude-mem start`. Soát tĩnh (đọc chuỗi lệnh) báo nhầm «thiếu tệp» vì hook
   của cả hai tự dò đường dẫn lúc chạy — muốn kết luận phải chạy thử, đừng tin soát tĩnh.
+- **16/11: Gói 1 học từ ECC** (`D:\codevstdio\docs\knowledge\tham-khao-ecc.md`; spec + plan ở `docs/superpowers/`).
+  Cổng lệnh phá huỷ tách lệnh bằng `shlex` — regex cũ lọt `git -C repo push`, `git --no-pager push`,
+  `git -c x=1 reset --hard`, hỏi thừa `echo "rm -rf …"`. Mọi cổng ghi vết `{"loai": "cong"}`; lệnh `do-cong`;
+  `HARNESS_TAT` tắt từng cổng quy trình. Dây ngắt vòng lặp: 5 lượt liền cùng `ky` (SHA-1 tên công cụ + tham số).
 - **15/11: `superpowers` + `ponytail` bắt buộc khi làm dự án** (người dùng chốt); bật lại `ponytail`. Cổng mới trong
   `harness.py`: `canh-cong` từ chối ghi tệp dự án khi phiên chưa gọi skill `superpowers:*`; `ket-phien` giữ lượt lại một
   lần nếu đã ghi tệp dự án mà chưa gọi `superpowers:verification-before-completion` sau lần ghi cuối; `bat-dau` cảnh báo
