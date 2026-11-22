@@ -38,7 +38,8 @@ MOC_LUOT_GOI = (60, 120, 200)   # mốc ngân sách lượt gọi công cụ m�
 MOC_NGU_CANH = (150_000,)  # mốc nhắc mềm: token gửi lại MỖI lượt
 # Mốc hộp duyệt. Nhắc mềm 150K/250K/350K bị bỏ qua ở cả 5 phiên trước 11/10 => chuyển quyết định sang người dùng.
 # 15/11: bỏ mốc 300K — autoCompactWindow của Opus là 200K nên ngữ cảnh không bao giờ chạm 300K.
-MOC_CONG_NGU_CANH = (200_000,)
+# 22/11: 200K cũng không bao giờ chạm (nén trước đó) -> 170K ≈ 85% cửa sổ, kịp checkpoint trước khi nén (ý từ ECC context-gate).
+MOC_CONG_NGU_CANH = (170_000,)
 HOP_DONG = Path("D:/codevstdio")  # cwd nằm dưới đây thì CLAUDE.md đã nạp, khỏi chèn bản nhắc trùng
 GOC_REPO = HOP_DONG / "repo"      # mỗi thư mục con là một repo có bộ nhớ docs/knowledge/ riêng (§13)
 NGUONG_TRANG_THAI = 6_000  # byte. trang_thai.md lớn hơn -> cảnh báo đầu phiên (CredX 15/11: 20 KB ≈ 10K token)
@@ -337,8 +338,9 @@ def cong_ngu_canh(vao):
         return
     ghi_vet(sid, {"t": bay_gio(), "loai": "day-ngat", "khoa": khoa})
     quyet_dinh(vao, "ngu-canh", "ask", f"[HARNESS §11] Ngữ cảnh đã {ctx:,} token MỖI lượt gọi (mốc {moc // 1000}K) — mỗi lượt từ đây "
-                      "tốn ít nhất ngần ấy. Cho phép = làm tiếp phiên này. Từ chối = agent ghi bàn giao vào "
-                      "docs/knowledge/nhat_ky/ + trang_thai.md rồi đưa câu lệnh để mở phiên mới.")
+                      "tốn ít nhất ngần ấy, và sắp tự nén (mất chi tiết). Cho phép = làm tiếp phiên này. Từ chối = "
+                      "agent PHẢI: đưa việc dở tới điểm dừng sạch → ghi mục «Tiếp theo» của trang_thai.md (+ "
+                      "docs/knowledge/nhat_ky/) → đưa câu lệnh mở phiên mới, rồi dừng.")
 
 
 # ---------------------------------------------------------------- tầng 2: cảm biến
@@ -517,7 +519,8 @@ def prompt_cuoi(duong_dan):
     return ""
 
 
-def ket_phien():
+def ket_phien(truoc_nen=False):
+    """Stop: ghi tổng kết + giữ lượt khi thiếu xác minh/bàn giao. PreCompact (truoc_nen): chỉ ghi tổng kết."""
     vao = doc_dau_vao()
     sid = vao.get("session_id", "")
     vet = doc_vet(sid)
@@ -543,7 +546,7 @@ def ket_phien():
         "so_tep_luc_nhac": cu.get("so_tep_luc_nhac", 0),
         "ban_giao_luc": cu.get("ban_giao_luc", 0),  # số lượt ghi repo lúc giữ lượt đòi bàn giao — mỗi trạng thái chỉ giữ một lần
     }
-    dung = vao.get("stop_hook_active")
+    dung = truoc_nen or vao.get("stop_hook_active")
     chan = 0 if dung else thieu_xac_minh(goi)
     if chan and not ghi_cong(vao, "xac-minh", "block"):
         chan = 0
@@ -575,17 +578,19 @@ def ket_phien():
 
 # ---------------------------------------------------------------- tầng 1 + 4: đầu phiên
 
-def phien_truoc(cwd, sid):
+def phien_truoc(cwd, sid, vua_nen=False):
+    """Tổng kết mới nhất cùng cwd của phiên KHÁC; vua_nen -> của CHÍNH phiên này (PreCompact vừa ghi)."""
     tot = None
     for p in VET_TONG_KET.glob("*.json"):
         tk = doc_json(p, {})
-        if tk.get("phien") != sid and chuan_hoa(tk.get("cwd", "")) == chuan_hoa(cwd):
+        if (tk.get("phien") == sid) == vua_nen and chuan_hoa(tk.get("cwd", "")) == chuan_hoa(cwd):
             if tot is None or tk.get("cap_nhat", "") > tot.get("cap_nhat", ""):
                 tot = tk
     if not tot:
         return None
     tep = tot.get("tep_da_ghi", [])
-    s = (f"- Phiên trước ở thư mục này ({tot.get('cap_nhat', '')[:16]}): {tot.get('luot_goi', 0)} lượt gọi, "
+    nhan = "Trước lần nén vừa rồi, phiên này" if vua_nen else "Phiên trước ở thư mục này"
+    s = (f"- {nhan} ({tot.get('cap_nhat', '')[:16]}): {tot.get('luot_goi', 0)} lượt gọi, "
          f"{tot.get('that_bai', 0)} thất bại, {len(tep)} tệp đã ghi")
     if tot.get("day_ngat"):
         s += f", dây ngắt đã bật: {', '.join(tot['day_ngat'])}"
@@ -594,6 +599,8 @@ def phien_truoc(cwd, sid):
         s += f"\n  Yêu cầu cuối: «{tot['prompt_cuoi']}»"
     if tep:
         s += f"\n  Tệp đã ghi: {', '.join(Path(t).name for t in tep[:6])}" + (f" (+{len(tep) - 6})" if len(tep) > 6 else "")
+    if tot.get("lenh_that_bai"):
+        s += f"\n  Lệnh hỏng gần nhất: {' | '.join(tot['lenh_that_bai'][-3:])}"
     return s
 
 
@@ -665,7 +672,7 @@ def bat_dau():
         ds = sorted(p.name for p in nk.glob("*.md") if p.name[:1].isdigit()) if nk.is_dir() else []
         if ds:
             dong.append(f"- Nhật ký phiên mới nhất: docs/knowledge/nhat_ky/{ds[-1]}")
-    truoc = phien_truoc(str(cwd), vao.get("session_id", ""))
+    truoc = phien_truoc(str(cwd), vao.get("session_id", ""), vao.get("source") == "compact")
     if truoc:
         dong.append(truoc)
     dong += soat_plugin()
@@ -1071,6 +1078,17 @@ def tu_kiem_bat_buoc():
         o = [chay("sau-cong-cu", **doc_lai()) for _ in range(5)]
         assert "vòng lặp" not in o[3] and "vòng lặp" in o[4], "5 lượt giống hệt mà không cảnh báo"
         assert not any("vòng lặp" in chay("sau-cong-cu", **doc_lai(offset=i)) for i in range(5)), "khác offset mà báo lặp"
+        # Hộp duyệt ngữ cảnh phải bắn TRƯỚC autoCompact 200K, và lời nhắc là mệnh lệnh checkpoint.
+        tx_lon = tam / "tx_lon.jsonl"
+        tx_lon.write_text(json.dumps({"type": "assistant", "message": {"usage": {"cache_read_input_tokens": 175_000}}}) + "\n",
+                          encoding="utf-8")
+        o = chay("canh-cong", transcript_path=str(tx_lon), **lenh("echo ok"))
+        assert '"ask"' in o and "trang_thai.md" in o, "ngữ cảnh 175K mà không hỏi checkpoint"
+        # PreCompact ghi trạng thái -> SessionStart(compact) cùng phiên chèn lại việc dở.
+        chay("truoc-nen", cwd=str(tam), transcript_path=str(tx))
+        o = chay("bat-dau", cwd=str(tam), source="compact")
+        assert "a.md" in o and "python hong.py" in o, "sau nén không chèn lại tệp đã ghi / lệnh hỏng của chính phiên"
+        assert "a.md" not in chay("bat-dau", cwd=str(tam), source="startup"), "phiên mới chèn nhầm trạng thái của chính nó"
         print("tự kiểm bắt buộc: đạt.")
     finally:
         tep_vet(sid).unlink(missing_ok=True)
@@ -1079,7 +1097,7 @@ def tu_kiem_bat_buoc():
 
 
 LENH = {"bat-dau": bat_dau, "canh-cong": canh_cong, "sau-cong-cu": sau_cong_cu,
-        "ket-phien": ket_phien, "quet": quet, "bao-cao": bao_cao, "do-cong": do_cong,
+        "ket-phien": ket_phien, "truoc-nen": lambda: ket_phien(truoc_nen=True), "quet": quet, "bao-cao": bao_cao, "do-cong": do_cong,
         "chi-muc": chi_muc, "do-ton": do_ton, "tim": tim, "tu-kiem-bat-buoc": tu_kiem_bat_buoc}
 
 

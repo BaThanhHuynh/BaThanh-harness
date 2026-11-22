@@ -3,4 +3,31 @@
 mkdir -p dot-claude
 cp /d/codevstdio/CLAUDE.md codevstdio/CLAUDE.md
 cp "$HOME/.claude/settings.json" dot-claude/settings.json
-git add codevstdio/CLAUDE.md dot-claude/settings.json
+
+# Skill tự cài (bỏ skills/synced: Anthropic tự đồng bộ theo tài khoản), mod tự viết, danh sách plugin.
+# Xoá rồi chép lại để skill/mod đã gỡ trên máy cũng biến mất khỏi repo.
+rm -rf dot-claude/skills dot-claude/dev-mods
+mkdir -p dot-claude/skills dot-claude/dev-mods dot-claude/plugins
+for s in "$HOME"/.claude/skills/*/; do
+  n=$(basename "$s")
+  [ "$n" = synced ] || [ -z "$(ls -A "$s")" ] || cp -r "$s" dot-claude/skills/
+done
+cp -r "$HOME"/.claude/dev-mods/*/* dot-claude/dev-mods/ 2>/dev/null
+cp "$HOME/.claude/plugins/installed_plugins.json" "$HOME/.claude/plugins/known_marketplaces.json" dot-claude/plugins/
+
+# MCP nằm trong ~/.claude.json (tệp đó có thông tin tài khoản → không chép nguyên). Chỉ trích mcpServers, che env/headers.
+python -I - "$HOME/.claude.json" > dot-claude/mcp-servers.json <<'EOF'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+nguon = {"(user)": d.get("mcpServers") or {}}
+nguon.update({p: v["mcpServers"] for p, v in (d.get("projects") or {}).items()
+              if v.get("mcpServers") and "scratch-workspaces" not in p})
+for may in nguon.values():
+    for cfg in may.values():
+        for k in ("env", "headers"):
+            if cfg.get(k):
+                cfg[k] = {key: "<dien-tay>" for key in cfg[k]}
+print(json.dumps({p: s for p, s in nguon.items() if s}, indent=2, ensure_ascii=False))
+EOF
+
+git add codevstdio/CLAUDE.md dot-claude

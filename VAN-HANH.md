@@ -10,7 +10,7 @@ Dựng lại ngày 10/09/2026, sau khi `~/.claude/harness/` mất trong đợt c
 | --- | --- | --- | --- |
 | 1 Guides | AGENTS.md, rule files, constraints | `CLAUDE.md` + 16 rule · `<repo>/AGENTS.md` · `DINH-TUYEN.md` · `NHAC-DINH-TUYEN.md` | CLAUDE.md chỉ được nạp khi cwd nằm dưới `D:\codevstdio`; hook `SessionStart` chèn bản nhắc **chỉ khi cwd nằm ngoài** (11/10 — trước đó chèn trùng ở mọi phiên) |
 | 2 Sensors | linters, tests, validators, LLM-as-judge | Cảm biến cú pháp `.py` (compile) và `.json`/`.ipynb` (parse, bắt cả BOM — §14) sau mỗi Edit/Write | `PostToolUse` → `decision: block`, lỗi đưa thẳng về agent |
-| 3 Agentic loop | plan → execute → verify → fix, retry có giới hạn, trần ngân sách, leo thang | §5 vòng đời, §7 ngắt mạch, §11 trần phiên | Dây ngắt mềm: cùng một lệnh thất bại ≥ 2 lần · mốc **60/120/200** lượt gọi · ngữ cảnh 150K token mỗi lượt · sang tệp thứ 13. **Hộp duyệt** (`PreToolUse` → `ask`, một lần mỗi mốc): ngữ cảnh **200K** token mỗi lượt (bỏ 300K ngày 15/11: autoCompactWindow 200K) |
+| 3 Agentic loop | plan → execute → verify → fix, retry có giới hạn, trần ngân sách, leo thang | §5 vòng đời, §7 ngắt mạch, §11 trần phiên | Dây ngắt mềm: cùng một lệnh thất bại ≥ 2 lần · mốc **60/120/200** lượt gọi · ngữ cảnh 150K token mỗi lượt · sang tệp thứ 13. **Hộp duyệt** (`PreToolUse` → `ask`, một lần mỗi mốc): ngữ cảnh **170K** token mỗi lượt (bỏ 300K ngày 15/11, hạ 200K → 170K ngày 22/11: autoCompactWindow 200K nên nén trước khi chạm 200K). `PreCompact` ghi tổng kết, `bat-dau` sau nén chèn lại việc dở của chính phiên |
 | 4 Memory | state files, artifacts, decision log | `<repo>/AGENTS.md`, `docs/knowledge/`, nhật ký phiên của repo · `vet/tong-ket/` | `SessionStart` chèn mục «Tiếp theo» của `trang_thai.md` + tóm tắt phiên trước ở cùng thư mục · `Stop` giữ lượt một lần đòi bàn giao §13 · `harness.py tim` |
 | 5 Permissions | tool access, write limits, approval gates | §9 danh sách cấm cứng · §10 bí mật | `PreToolUse`: lệnh phá huỷ → `ask` · sửa tệp bí mật → `deny` · đọc tệp bí mật → `ask` |
 | 6 Observability | trace logs, cost tracking, trip wires | `vet/phien/<session>.jsonl` · `vet/tong-ket/<session>.json` (token đọc từ transcript) | `PostToolUse` / `PostToolUseFailure` / `Stop` · `harness.py bao-cao` |
@@ -23,7 +23,7 @@ phiên dựng lại. Những giới hạn đã chấp nhận:
 - **LLM-as-judge không tự động.** Chạy mỗi lượt thì tốn token và ồn. Chỉ gọi khi cần, qua skill review ở bước REVIEW_DIFF (`DINH-TUYEN.md`).
 - **Cảm biến chỉ kiểm cú pháp.** Không có bộ test chung cho mọi repo. Kiểm chứng ngữ nghĩa vẫn theo `AGENTS.md`
   của từng repo (với CredX: chạy lại chuỗi dựng số).
-- **Ngân sách không chặn cứng.** Chặn giữa chừng để lại việc dở dang. Từ 11/10 mốc 200K (300K bỏ 15/11) chuyển thành hộp duyệt:
+- **Ngân sách không chặn cứng.** Chặn giữa chừng để lại việc dở dang. Từ 11/10 mốc 200K (300K bỏ 15/11, 200K → 170K ngày 22/11) chuyển thành hộp duyệt:
   nhắc mềm bị bỏ qua ở cả 5 phiên trước đó, nên quyết định được đưa cho người dùng — người thấy chi phí.
 - **Chi phí chỉ đếm bằng token** (vào / cache ghi / cache đọc / ra), không quy ra tiền. Bảng giá thay đổi theo thời gian nên không hardcode.
 - **Cổng quyền dựa trên regex.** Có thể hỏi thừa (ví dụ `echo "rm -rf"`) và bỏ sót lệnh được ngụy trang.
@@ -36,7 +36,7 @@ phiên dựng lại. Những giới hạn đã chấp nhận:
 
 | Tệp | Vai trò |
 | --- | --- |
-| `harness.py` | Engine. Hook: `bat-dau` · `canh-cong` · `sau-cong-cu` · `ket-phien`. Chạy tay: `quet` · `bao-cao` · `chi-muc` · `do-ton` · `tim` · `tu-kiem-bat-buoc` |
+| `harness.py` | Engine. Hook: `bat-dau` · `canh-cong` · `sau-cong-cu` · `ket-phien` · `truoc-nen`. Chạy tay: `quet` · `bao-cao` · `chi-muc` · `do-ton` · `tim` · `tu-kiem-bat-buoc` |
 | `NHAC-DINH-TUYEN.md` | Chèn vào ngữ cảnh mỗi đầu phiên và sau mỗi lần nén. **Giữ ngắn** — nó tốn ngữ cảnh |
 | `DINH-TUYEN.md` | Việc X → skill nào (soạn tay) |
 | `INVENTORY.md` | Sinh bởi `quet`, không sửa tay |
@@ -53,6 +53,7 @@ phiên dựng lại. Những giới hạn đã chấp nhận:
 | `PreToolUse` | `Bash\|PowerShell\|Read\|Edit\|Write\|MultiEdit\|NotebookEdit` | `canh-cong` |
 | `PostToolUse`, `PostToolUseFailure` | `*` | `sau-cong-cu` |
 | `Stop` | — | `ket-phien` |
+| `PreCompact` | — | `truoc-nen` |
 
 Mỗi hook là một lần khởi động `python` (~0,1 s mỗi lượt gọi công cụ).
 
@@ -136,6 +137,24 @@ Lưu ý: `claude plugin details` ghi hook là «không tốn ngữ cảnh» — 
 - **15/11 (quota, đợt 2):** `canh-cong` từ chối `Read` trọn tệp >200 KB không kèm offset/limit; `env`:
   `BASH_MAX_OUTPUT_LENGTH=15000`, `MAX_MCP_OUTPUT_TOKENS=10000`; tắt `mattpocock-skills` (0 lần dùng, trùng superpowers).
   Căn cứ (mọi transcript): Bash ~65%, Read ~23% kết quả công cụ đưa vào ngữ cảnh. Bản trước: `sao-luu/2026-11-15/`.
+- **22/11 (rút gọn luật, đợt 1):** phần nạp sẵn `CLAUDE.md` + 13 rule 14.513 → 11.499 byte (~7,6K → ~6,0K token).
+  Bỏ chỗ trùng: §2 (ponytail tự nạp), câu mô tả hook ở §5 (hook tự báo), bảng model §11 rút một dòng, BOM /
+  `Set-Content` / here-string ở §14 (system prompt + cảm biến BOM), §15 phần output style Concise đã lo; §11 sửa
+  trần 200K → 170K. Giữ số §1–16. Kế hoạch `docs/2026-11-22-rut-gon-luat.md`; bản trước
+  `sao-luu/2026-11-22/truoc-rut-gon-luat/`. Đợt 2 (`AGENTS.md` từng repo) chưa làm.
+- **22/11 (ý từ ECC `context-gate` / `pre-compact`):** hộp duyệt ngữ cảnh 200K → **170K** (vết thật: 200K không bao giờ
+  chạm vì autoCompactWindow 200K nén trước); lời nhắc thành mệnh lệnh checkpoint (điểm dừng sạch → «Tiếp theo» của
+  `trang_thai.md` → câu lệnh mở phiên mới). Hook mới `PreCompact` → `truoc-nen`: ghi `vet/tong-ket/<session>.json`
+  (không gọi LLM, không giữ lượt); `bat-dau` với `source=compact` chèn lại tệp đã ghi, lệnh hỏng, yêu cầu cuối của
+  CHÍNH phiên. Tóm tắt phiên trước thêm 3 lệnh hỏng gần nhất. Tự kiểm thêm 2 ca.
+- **22/11 (đợt 2, MedicalGraph):** `AGENTS.md` 8.881 → 7.915 byte (−966): bỏ câu trùng §9/§11/§12 và dòng lịch sử;
+  dãy «số nhớ sẵn» chuyển nguyên văn sang `docs/knowledge/bai_hoc_du_an.md` §5.5 (số đã có ở `so_lieu_chot.json`).
+  `AGENTS.md` bị `.gitignore` nên bản sao lưu là bản cũ duy nhất: `sao-luu/2026-11-22/truoc-rut-gon-agents/MedicalGraph/`.
+- **22/11 (đợt 2, DART-ICD-10):** `AGENTS.md` 9.059 → 7.710 byte (−1.349): bỏ câu trùng §5/§12/§13 và dãy tra nhanh §0
+  trùng con trỏ ở thân; giữ số mục §0–§11, không chuyển thêm tệp. Bản cũ duy nhất (`.gitignore`): `sao-luu/2026-11-22/truoc-rut-gon-agents/DART-ICD-10/`.
+- **22/11 (đợt 2, CredX):** `AGENTS.md` 8.937 → 7.576 byte (−1.361): bỏ câu trùng §1/§5/§8/§9/§11/§13, lịch sử gói tuần 6/7
+  (đã ở `quy_trinh_lam_viec.md`), số làm bằng chứng ở §3/§5 (nguyên văn còn ở `luat_cung_bay_du_lieu.md`); giữ số mục §1–§7
+  và mọi số quyết định. Bản cũ duy nhất (`.gitignore`): `sao-luu/2026-11-22/truoc-rut-gon-agents/CredX/`.
 - **15/11 (đợt 3, 5 sửa):** `permissions.deny`/`ask` native trong `settings.json` (chặn sửa `.env`/khoá, hỏi trước
   `git push`/`reset --hard`/`clean`/`rebase`/`branch -D`/`rm -r`, đọc `.env`) — lớp chắn không phụ thuộc hook fail-open;
   `autoMode.environment` tin mọi repo dưới `D:\codevstdio\repo\`; `NHAC-DINH-TUYEN.md` thêm dòng phân định định dạng;

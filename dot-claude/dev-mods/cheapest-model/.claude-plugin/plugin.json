@@ -1,0 +1,6 @@
+{
+  "name": "cheapest-model",
+  "version": "0.1.0",
+  "description": "Always use the cheapest model that can do the job: routes each turn and each subagent to haiku, sonnet, opus or fable by how hard the work is.",
+  "types": "./types/index.d.ts"
+}

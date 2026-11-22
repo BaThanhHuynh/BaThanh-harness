@@ -1,0 +1,64 @@
+{
+  "version": 2,
+  "plugins": {
+    "superpowers@claude-plugins-official": [
+      {
+        "scope": "project",
+        "projectPath": "C:\\Users\\dell",
+        "installPath": "C:\\Users\\dell\\.claude\\plugins\\cache\\claude-plugins-official\\superpowers\\7.0.0",
+        "version": "7.0.0",
+        "installedAt": "2026-08-14T11:42:28.668Z",
+        "lastUpdated": "2026-11-11T09:28:04.690Z",
+        "gitCommitSha": "bb92a77741419a4ab5f06e711a283343f1ada0c3"
+      },
+      {
+        "scope": "user",
+        "installPath": "C:\\Users\\dell\\.claude\\plugins\\cache\\claude-plugins-official\\superpowers\\7.0.2",
+        "version": "7.0.2",
+        "installedAt": "2026-08-14T11:59:43.562Z",
+        "lastUpdated": "2026-11-13T09:51:50.605Z",
+        "gitCommitSha": "22f0b463e7a5e579904dd6211a520321035526f7"
+      }
+    ],
+    "caveman@caveman": [
+      {
+        "scope": "user",
+        "installPath": "C:\\Users\\dell\\.claude\\plugins\\cache\\caveman\\caveman\\c72984e4392c",
+        "version": "c72984e4392c",
+        "installedAt": "2026-08-14T12:06:36.412Z",
+        "lastUpdated": "2026-08-14T12:06:36.412Z",
+        "gitCommitSha": "c72984e4392c7a154e55c11dbf445f01ce5c35d4"
+      }
+    ],
+    "ponytail@ponytail": [
+      {
+        "scope": "user",
+        "installPath": "C:\\Users\\dell\\.claude\\plugins\\cache\\ponytail\\ponytail\\4.9.0",
+        "version": "4.9.0",
+        "installedAt": "2026-08-24T14:28:22.434Z",
+        "lastUpdated": "2026-08-24T14:28:22.434Z",
+        "gitCommitSha": "2ed6c52c9d7e5e56942508591085fd45dea277d3"
+      }
+    ],
+    "claude-mem@thedotmack": [
+      {
+        "scope": "user",
+        "installPath": "C:\\Users\\dell\\.claude\\plugins\\cache\\thedotmack\\claude-mem\\16.0.3",
+        "version": "16.0.3",
+        "installedAt": "2026-09-13T13:20:29.070Z",
+        "lastUpdated": "2026-11-22T05:27:50.373Z",
+        "gitCommitSha": "79d33254e5570b43175c639c2a2ce58bd1e221b9"
+      }
+    ],
+    "mattpocock-skills@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "C:\\Users\\dell\\.claude\\plugins\\cache\\claude-plugins-official\\mattpocock-skills\\1.3.1",
+        "version": "1.3.1",
+        "installedAt": "2026-10-23T10:07:01.694Z",
+        "lastUpdated": "2026-10-23T10:07:01.694Z",
+        "gitCommitSha": "49dd158d1076134a641b33efb035946536778336"
+      }
+    ]
+  }
+}

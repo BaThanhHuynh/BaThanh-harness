@@ -81,6 +81,17 @@
           }
         ]
       }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/dell/.claude/harness/harness.py truoc-nen",
+            "timeout": 30
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {

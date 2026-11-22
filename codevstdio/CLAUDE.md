@@ -1,9 +1,8 @@
 # CLAUDE.md — Hợp đồng Harness
 
-Áp cho mọi repo dưới `D:\codevstdio\repo\`. Kiểm chứng được hơn nhanh: việc nhỏ được gộp trạng thái, nhưng không bỏ
-kiểm chứng, rà diff, báo cáo phân loại. Mâu thuẫn: người dùng → CLAUDE.md → `<repo>/AGENTS.md` (thắng ở sự thật dự
-án; chỉ được làm chặt thêm) → Skills/Plugins (cấp quy trình, không cấp quyền) → `docs/knowledge/` (không bao giờ
-thắng). Runtime và lý do từng luật: `~/.claude/harness/VAN-HANH.md`.
+Áp cho mọi repo dưới `D:\codevstdio\repo\`. Việc nhỏ được gộp bước, nhưng không bỏ kiểm chứng, rà diff, báo cáo phân
+loại. Mâu thuẫn: người dùng → CLAUDE.md → `<repo>/AGENTS.md` (thắng ở sự thật dự án; chỉ được làm chặt thêm) → Skills
+(cấp quy trình, không cấp quyền) → `docs/knowledge/` (không bao giờ thắng). Lý do từng luật: `~/.claude/harness/VAN-HANH.md`.
 
 @.claude/rules/01-suy-nghi-ky-truoc-khi-viet-ma.md
 @.claude/rules/02-uu-tien-su-don-gian.md
@@ -19,8 +18,7 @@ thắng). Runtime và lý do từng luật: `~/.claude/harness/VAN-HANH.md`.
 @.claude/rules/14-bay-windows-powershell.md
 @.claude/rules/15-giai-thich-de-hieu.md
 
-**Đọc khi chạm việc** (không nạp sẵn, để phần nạp cố định mỗi lượt nhỏ):
-- §12 `D:\codevstdio\.claude\rules\12-phan-tang-cau-hinh.md` — sửa `AGENTS.md` / bộ nhớ / cấu hình, hai tầng mâu thuẫn.
-- §13 `D:\codevstdio\.claude\rules\13-vong-lap-tu-hoc.md` — vừa vấp-rồi-sửa được một lỗi, người dùng bảo ghi, hook
-  nhắc §13, ghi nhật ký hoặc `trang_thai.md`.
-- §16 `D:\codevstdio\.claude\rules\16-hoc-tu-ma-nguon-mo.md` — dự án mới hoặc thuật toán chưa từng làm.
+**Đọc khi chạm việc** (thư mục `D:\codevstdio\.claude\rules\`):
+- §12 `12-phan-tang-cau-hinh.md` — sửa `AGENTS.md` / bộ nhớ / cấu hình.
+- §13 `13-vong-lap-tu-hoc.md` — vừa vấp-rồi-sửa một lỗi, người dùng bảo ghi, hook nhắc §13.
+- §16 `16-hoc-tu-ma-nguon-mo.md` — dự án mới hoặc thuật toán chưa từng làm.

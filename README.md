@@ -31,7 +31,7 @@ Ngoài chi phí còn ba rủi ro: agent **quên** việc dở giữa các phiên
 | --- | --- | --- |
 | 1. Hướng dẫn | Nạp hợp đồng + bản nhắc rút gọn đầu phiên, bảng «việc X → skill nào» | `SessionStart` chèn ngữ cảnh, chỉ khi hợp đồng chưa tự nạp |
 | 2. Cảm biến | Sau mỗi lần ghi tệp: biên dịch `.py`, parse `.json`/`.ipynb` (bắt cả BOM) | `PostToolUse` trả lỗi thẳng về agent |
-| 3. Vòng lặp | Dây ngắt: 5 lượt gọi giống hệt liền nhau (kể cả thành công), cùng một lệnh hỏng ≥ 2 lần, mốc 60/120/200 lượt gọi, ngữ cảnh 150K, sang tệp thứ 13 | Nhắc mềm; ngữ cảnh vượt 200K → hộp duyệt cho người dùng |
+| 3. Vòng lặp | Dây ngắt: 5 lượt gọi giống hệt liền nhau (kể cả thành công), cùng một lệnh hỏng ≥ 2 lần, mốc 60/120/200 lượt gọi, ngữ cảnh 150K, sang tệp thứ 13 | Nhắc mềm; ngữ cảnh vượt 170K → hộp duyệt cho người dùng; trước khi nén ghi trạng thái, sau nén chèn lại |
 | 4. Bộ nhớ | Đầu phiên chèn mục «Tiếp theo» của `trang_thai.md` + tóm tắt phiên trước; cuối phiên đòi ghi bàn giao | `SessionStart` + `Stop` giữ lượt một lần; lệnh `tim` tra xuyên dự án |
 | 5. Quyền | Lệnh phá huỷ → hỏi; sửa tệp bí mật → chặn; đọc trọn tệp > 200 KB → chặn | `PreToolUse` + `permissions.deny`/`ask` native làm lớp chắn thứ hai |
 | 6. Quan sát | Vết từng lượt gọi, tổng kết token mỗi phiên | `vet/phien/*.jsonl`, `vet/tong-ket/*.json`, lệnh `bao-cao`, `do-ton` |
@@ -46,7 +46,7 @@ sửa tệp mà chưa chạy bước kiểm chứng (`superpowers:verification-b
   0 lần, mỗi đầu phiên chèn tới ~10K token. Thay bằng tệp Markdown trong từng repo (`AGENTS.md`,
   `docs/knowledge/trang_thai.md`, `nhat_ky/`) do harness nhắc ghi và tự chèn lại — chi phí gần như bằng 0.
 - **Hỏi thay vì chặn cứng ngân sách.** Chặn giữa chừng để lại việc dở dang; nhắc mềm thì bị bỏ qua ở cả 5 phiên đo.
-  Nên ở mốc 200K token, quyết định được đưa cho người dùng — người nhìn thấy chi phí.
+  Nên ở mốc 170K token (trước khi tự nén ở 200K), quyết định được đưa cho người dùng — người nhìn thấy chi phí.
 - **Hai lớp quyền.** Cổng regex trong hook có thể sót lệnh ngụy trang, nên các quy tắc quan trọng được lặp lại trong
   hệ thống quyền native của Claude Code — lớp này vẫn chắn khi hook lỗi.
 
@@ -61,7 +61,11 @@ VAN-HANH.md                 ghi chú vận hành: số đo quota, lịch sử th
 codevstdio/CLAUDE.md        hợp đồng 16 mục (bản chép)
 codevstdio/.claude/rules/   16 luật chi tiết: vòng đời tác vụ, ngắt mạch, quyền, bí mật, ngân sách ngữ cảnh…
 dot-claude/settings.json    cấu hình Claude Code: đăng ký hook, quyền, biến môi trường (bản chép)
-githooks/pre-commit         tự chép CLAUDE.md và settings.json vào repo trước mỗi commit
+dot-claude/skills/          skill tự cài (bỏ skills/synced — Anthropic tự đồng bộ theo tài khoản)
+dot-claude/plugins/         danh sách plugin + marketplace đã cài, để cài lại
+dot-claude/dev-mods/        mod Claude Code tự viết
+dot-claude/mcp-servers.json máy chủ MCP theo dự án, trích từ ~/.claude.json, đã che env/headers
+githooks/pre-commit         trước mỗi commit tự chép CLAUDE.md, settings.json, skill, plugin, mod, MCP vào repo
 ```
 
 ## Cài đặt
@@ -79,6 +83,11 @@ git -C ~/.claude/harness config core.hooksPath githooks
    bằng junction (PowerShell):
    `New-Item -ItemType Junction -Path D:\codevstdio\.claude\rules -Target $HOME\.claude\harness\codevstdio\.claude\rules`
 3. Tự kiểm: `python ~/.claude/harness/harness.py tu-kiem-bat-buoc`
+4. Skill, plugin, MCP (tuỳ chọn):
+   - Skill: chép `dot-claude/skills/*` vào `~/.claude/skills/`; mod: chép `dot-claude/dev-mods/*` vào `~/.claude/dev-mods/<id>/`.
+   - Plugin: với mỗi mục trong `dot-claude/plugins/known_marketplaces.json` chạy `/plugin marketplace add <repo>`,
+     rồi `/plugin install <tên>@<marketplace>` theo `installed_plugins.json`.
+   - MCP: thêm bằng `claude mcp add` theo `dot-claude/mcp-servers.json`, điền lại các giá trị `<dien-tay>`.
 
 ## Lệnh chạy tay
 

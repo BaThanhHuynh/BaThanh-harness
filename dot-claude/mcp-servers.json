@@ -1,0 +1,17 @@
+{
+  "D:/codevstdio/repo/DART-ICD-10": {
+    "playwright": {
+      "type": "stdio",
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "@playwright/mcp@latest",
+        "--output-dir",
+        "C:/Users/dell/AppData/Local/Temp/playwright-mcp"
+      ],
+      "env": {}
+    }
+  }
+}

@@ -9,6 +9,5 @@ cho **từng lần**.
 `pip install` ngoài venv · đổi Python / Node toàn cục · sửa `.env`, credentials, khoá riêng, chứng chỉ. Được phép một
 lần không có nghĩa là được phép lần sau hay ở ngữ cảnh khác.
 
-Thao tác khó hoàn tác: nhìn kỹ đích trước; tệp là bản duy nhất thì chuyển chỗ, không xoá, và nói rõ. Mã thử (script
-đo, debug, dữ liệu giả) để trong scratchpad hoặc `tests/scratchpad/`, xong thì xoá — trừ script tái lập kết quả đã
-công bố (thuộc repo, đặt đúng chỗ, tên rõ nghĩa).
+Thao tác khó hoàn tác: nhìn kỹ đích trước; tệp là bản duy nhất thì chuyển chỗ, không xoá. Mã thử để trong scratchpad
+hoặc `tests/scratchpad/`, xong thì xoá — trừ script tái lập kết quả đã công bố.

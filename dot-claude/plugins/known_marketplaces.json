@@ -1,0 +1,35 @@
+{
+  "claude-plugins-official": {
+    "source": {
+      "source": "github",
+      "repo": "anthropics/claude-plugins-official"
+    },
+    "installLocation": "C:\\Users\\dell\\.claude\\plugins\\marketplaces\\claude-plugins-official",
+    "lastUpdated": "2026-11-22T06:11:51.073Z"
+  },
+  "ponytail": {
+    "source": {
+      "source": "github",
+      "repo": "DietrichGebert/ponytail"
+    },
+    "installLocation": "C:\\Users\\dell\\.claude\\plugins\\marketplaces\\ponytail",
+    "lastUpdated": "2026-09-10T16:38:55.488Z"
+  },
+  "thedotmack": {
+    "source": {
+      "source": "github",
+      "repo": "thedotmack/claude-mem"
+    },
+    "installLocation": "C:\\Users\\dell\\.claude\\plugins\\marketplaces\\thedotmack",
+    "lastUpdated": "2026-11-22T06:11:51.618Z",
+    "autoUpdate": true
+  },
+  "caveman": {
+    "source": {
+      "source": "github",
+      "repo": "JuliusBrussee/caveman"
+    },
+    "installLocation": "C:\\Users\\dell\\.claude\\plugins\\marketplaces\\caveman",
+    "lastUpdated": "2026-09-10T16:39:54.197Z"
+  }
+}
