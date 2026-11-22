@@ -6,7 +6,7 @@ thật của tác giả.
 
 - **Một tệp Python duy nhất** (`harness.py`, ~950 dòng), chỉ dùng thư viện chuẩn, không phụ thuộc ngoài.
 - **Gắn vào Claude Code qua hook** (`SessionStart`, `PreToolUse`, `PostToolUse`, `Stop`).
-- **Hợp đồng bằng văn bản** (`codevstdio/CLAUDE.md` + 16 luật trong `codevstdio/.claude/rules/`) nói agent *phải* làm gì;
+- **Hợp đồng bằng văn bản** (`codevstdio/CLAUDE.md` + 15 luật trong `codevstdio/.claude/rules/` + §16 ở `docs/`) nói agent *phải* làm gì;
   harness **cưỡng chế** những điều văn bản không tự làm được.
 - **Fail-open:** lỗi nội bộ của hook được ghi vào log và thoát mã 0. Harness hỏng không bao giờ làm hỏng phiên làm việc.
 
@@ -59,7 +59,7 @@ DINH-TUYEN.md               bảng «việc X → skill nào», kèm căn cứ g
 INVENTORY.md                danh mục skill/plugin, sinh bởi `harness.py quet`
 VAN-HANH.md                 ghi chú vận hành: số đo quota, lịch sử thay đổi, cách khôi phục
 codevstdio/CLAUDE.md        hợp đồng 16 mục (bản chép)
-codevstdio/.claude/rules/   16 luật chi tiết: vòng đời tác vụ, ngắt mạch, quyền, bí mật, ngân sách ngữ cảnh…
+codevstdio/.claude/rules/   15 luật chi tiết (§16 ở docs/, không tự nạp): vòng đời tác vụ, ngắt mạch, quyền, bí mật, ngân sách ngữ cảnh…
 dot-claude/settings.json    cấu hình Claude Code: đăng ký hook, quyền, biến môi trường (bản chép)
 dot-claude/skills/          skill tự cài (bỏ skills/synced — Anthropic tự đồng bộ theo tài khoản)
 dot-claude/plugins/         danh sách plugin + marketplace đã cài, để cài lại

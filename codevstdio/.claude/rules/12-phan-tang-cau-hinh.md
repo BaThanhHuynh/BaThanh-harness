@@ -1,3 +1,10 @@
+---
+paths:
+  - "**/AGENTS.md"
+  - "**/CLAUDE.md"
+  - "**/settings*.json"
+---
+
 ## 12. Phân tầng cấu hình
 
 CLAUDE.md: hành vi, an toàn, kiểm chứng, vòng đời, chính sách công cụ. `AGENTS.md`: kiến trúc, lệnh chạy, ràng

@@ -147,6 +147,13 @@ Lưu ý: `claude plugin details` ghi hook là «không tốn ngữ cảnh» — 
   `trang_thai.md` → câu lệnh mở phiên mới). Hook mới `PreCompact` → `truoc-nen`: ghi `vet/tong-ket/<session>.json`
   (không gọi LLM, không giữ lượt); `bat-dau` với `source=compact` chèn lại tệp đã ghi, lệnh hỏng, yêu cầu cuối của
   CHÍNH phiên. Tóm tắt phiên trước thêm 3 lệnh hỏng gần nhất. Tự kiểm thêm 2 ca.
+- **22/11 (3 sửa tối ưu nạp):** (1) §12 thêm `paths:` (`**/AGENTS.md`, `**/CLAUDE.md`, `**/settings*.json`), §13 thêm
+  `paths:` (`**/docs/knowledge/**`) để chỉ nạp khi Claude đọc/ghi tệp khớp; §16 chuyển khỏi `rules/` sang
+  `docs/16-hoc-tu-ma-nguon-mo.md` (`CLAUDE.md` trỏ `~/.claude/harness/docs/…`, +23 byte). Tự nạp đầu phiên
+  16.207 → 11.522 byte (−4.685, ~−2,5K token) — **chưa kiểm ở phiên mới**. (2) `harness.py`: `traceback` (~95 ms) và
+  `statistics` (~29 ms) nạp ngay trong `main()` / `do_cong()`; `canh-cong` trung vị 10 lần **318 → 209 ms** (−109 ms),
+  `loi.log` không thêm dòng. (3) `NHAC-DINH-TUYEN.md`: «200K» → 170K cho khớp `MOC_CONG_NGU_CANH`. Ghi chú: ngân sách mặc
+  định 11.000 của `kiem_luat.py` đã vượt 499 byte từ đợt rút gọn (số chốt 11.499), nay 522.
 - **22/11 (đợt 2, MedicalGraph):** `AGENTS.md` 8.881 → 7.915 byte (−966): bỏ câu trùng §9/§11/§12 và dòng lịch sử;
   dãy «số nhớ sẵn» chuyển nguyên văn sang `docs/knowledge/bai_hoc_du_an.md` §5.5 (số đã có ở `so_lieu_chot.json`).
   `AGENTS.md` bị `.gitignore` nên bản sao lưu là bản cũ duy nhất: `sao-luu/2026-11-22/truoc-rut-gon-agents/MedicalGraph/`.

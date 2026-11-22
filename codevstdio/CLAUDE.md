@@ -21,4 +21,4 @@ loại. Mâu thuẫn: người dùng → CLAUDE.md → `<repo>/AGENTS.md` (thắ
 **Đọc khi chạm việc** (thư mục `D:\codevstdio\.claude\rules\`):
 - §12 `12-phan-tang-cau-hinh.md` — sửa `AGENTS.md` / bộ nhớ / cấu hình.
 - §13 `13-vong-lap-tu-hoc.md` — vừa vấp-rồi-sửa một lỗi, người dùng bảo ghi, hook nhắc §13.
-- §16 `16-hoc-tu-ma-nguon-mo.md` — dự án mới hoặc thuật toán chưa từng làm.
+- §16 `~/.claude/harness/docs/16-hoc-tu-ma-nguon-mo.md` — dự án mới hoặc thuật toán chưa từng làm.

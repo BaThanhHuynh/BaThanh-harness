@@ -5,7 +5,7 @@
       "repo": "anthropics/claude-plugins-official"
     },
     "installLocation": "C:\\Users\\dell\\.claude\\plugins\\marketplaces\\claude-plugins-official",
-    "lastUpdated": "2026-11-22T06:11:51.073Z"
+    "lastUpdated": "2026-11-22T06:44:32.926Z"
   },
   "ponytail": {
     "source": {
@@ -21,7 +21,7 @@
       "repo": "thedotmack/claude-mem"
     },
     "installLocation": "C:\\Users\\dell\\.claude\\plugins\\marketplaces\\thedotmack",
-    "lastUpdated": "2026-11-22T06:11:51.618Z",
+    "lastUpdated": "2026-11-22T06:44:33.045Z",
     "autoUpdate": true
   },
   "caveman": {

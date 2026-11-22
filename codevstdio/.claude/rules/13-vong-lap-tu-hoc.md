@@ -1,3 +1,8 @@
+---
+paths:
+  - "**/docs/knowledge/**"
+---
+
 ## 13. Vòng lặp tự học — chạy tới đâu, ghi tới đó
 
 Ghi ngay khi xong một việc đáng ghi, đừng đợi cuối phiên — ngữ cảnh có thể mất bất cứ lúc nào.

@@ -20,9 +20,7 @@ import json
 import os
 import re
 import shlex
-import statistics
 import sys
-import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -865,6 +863,7 @@ def luot_qua(b, sau):
 def do_cong():
     """`harness.py do-cong` — mỗi cổng: số lần bắn, số phiên bị bắn, số lần tắt, số lần sau đó chính lệnh/tệp ấy chạy
     được («qua») và trung vị số lượt gọi từ lúc bắn đến lúc qua (0 = người dùng duyệt ngay)."""
+    import statistics  # chỉ lệnh chạy tay này cần; nạp ở đầu tệp thì hook nào cũng trả ~29 ms
     sys.stdout.reconfigure(encoding="utf-8")
     tep = sorted(VET_PHIEN.glob("*.jsonl"))
     so = {}  # cổng -> [bắn, {phiên}, tắt, qua, [lượt vòng]]
@@ -1115,6 +1114,7 @@ def main():
     except Exception:
         if ham in (quet, bao_cao, do_cong, chi_muc, do_ton, tim, tu_kiem_bat_buoc):
             raise
+        import traceback  # chỉ nhánh lỗi cần; nạp ở đầu tệp thì hook nào cũng trả ~95 ms
         LOG_LOI.parent.mkdir(parents=True, exist_ok=True)
         with LOG_LOI.open("a", encoding="utf-8") as f:
             f.write(f"{bay_gio()} {ten}\n{traceback.format_exc()}\n")
