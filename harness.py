@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 
 GOC = Path(__file__).resolve().parent
-CLAUDE_DIR = GOC.parent
+CLAUDE_DIR = Path.home() / ".claude"  # không suy từ GOC: repo có thể nằm ngoài ~/.claude (nối bằng junction)
 VET_PHIEN = GOC / "vet" / "phien"        # vết từng lượt gọi công cụ, một tệp JSONL mỗi phiên
 VET_TONG_KET = GOC / "vet" / "tong-ket"  # tổng kết mỗi phiên, ghi đè ở mỗi Stop
 LOG_LOI = GOC / "vet" / "loi.log"

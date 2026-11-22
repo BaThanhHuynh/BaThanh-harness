@@ -73,21 +73,22 @@ githooks/pre-commit         trước mỗi commit tự chép CLAUDE.md, settings
 Cần Windows, Claude Code và Python 3 (đang chạy trên 3.14). Đường dẫn mặc định theo máy tác giả
 (`D:\codevstdio` cho hợp đồng và repo); muốn dùng chỗ khác thì sửa hằng `HOP_DONG` ở đầu `harness.py`.
 
-```bash
-git clone https://github.com/BaThanhHuynh/BaThanh-harness.git ~/.claude/harness
-git -C ~/.claude/harness config core.hooksPath githooks
+Repo nằm ở `D:\codevstdio\BaThanh-harness` cho dễ thấy, dễ sửa; `~/.claude/harness` chỉ là junction trỏ về đây.
+Máy mới (PowerShell):
+
+```powershell
+git clone https://github.com/BaThanhHuynh/BaThanh-harness.git D:\codevstdio\BaThanh-harness
+powershell -ExecutionPolicy Bypass -File D:\codevstdio\BaThanh-harness\cai-dat.ps1
 ```
 
-1. Gộp khối `hooks` (và nếu muốn, `permissions`) từ `dot-claude/settings.json` vào `~/.claude/settings.json`.
-2. Đặt hợp đồng vào thư mục gốc chứa các dự án: chép `codevstdio/CLAUDE.md`, và nối `codevstdio/.claude/rules`
-   bằng junction (PowerShell):
-   `New-Item -ItemType Junction -Path D:\codevstdio\.claude\rules -Target $HOME\.claude\harness\codevstdio\.claude\rules`
-3. Tự kiểm: `python ~/.claude/harness/harness.py tu-kiem-bat-buoc`
-4. Skill, plugin, MCP (tuỳ chọn):
-   - Skill: chép `dot-claude/skills/*` vào `~/.claude/skills/`; mod: chép `dot-claude/dev-mods/*` vào `~/.claude/dev-mods/<id>/`.
-   - Plugin: với mỗi mục trong `dot-claude/plugins/known_marketplaces.json` chạy `/plugin marketplace add <repo>`,
-     rồi `/plugin install <tên>@<marketplace>` theo `installed_plugins.json`.
-   - MCP: thêm bằng `claude mcp add` theo `dot-claude/mcp-servers.json`, điền lại các giá trị `<dien-tay>`.
+`cai-dat.ps1` (chạy lại vô hại; thứ đã có thì bỏ qua) làm: junction `~/.claude/harness` và
+`D:\codevstdio\.claude\rules`, chép `CLAUDE.md`, bật git hook, chép skill tự cài, chép `settings.json`
+(đổi đường dẫn sang HOME máy mới), rồi tự kiểm. Còn làm tay:
+
+- `settings.json` đã có sẵn → gộp tay khối `hooks`/`permissions` từ `dot-claude/settings.json`.
+- Plugin: chạy trong Claude Code các lệnh `/plugin marketplace add …` và `/plugin install …` mà script in ra.
+- MCP: thêm bằng `claude mcp add` theo `dot-claude/mcp-servers.json`, điền lại các giá trị `<dien-tay>`.
+- Mod: chép `dot-claude/dev-mods/*` vào `~/.claude/dev-mods/<id>/` nếu cần.
 
 ## Lệnh chạy tay
 
