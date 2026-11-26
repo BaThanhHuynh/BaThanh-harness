@@ -31,7 +31,7 @@ VET_TONG_KET = GOC / "vet" / "tong-ket"  # tổng kết mỗi phiên, ghi đè �
 LOG_LOI = GOC / "vet" / "loi.log"
 
 NGUONG_THAT_BAI = 2        # §7: cùng một lệnh thất bại từ lần thứ 2 -> DỪNG
-NGUONG_LAP = 5             # §7/§11: 5 lượt liền giống hệt (kể cả thành công) -> nhắc; ngưỡng 3 báo nhầm (ECC)
+NGUONG_LAP = (5, 8)        # §7/§11: 5 / 8 lượt liền giống hệt (kể cả thành công) -> nhắc / nhắc chi tiết; 3 báo nhầm (ECC)
 MOC_LUOT_GOI = (60, 120, 200)   # mốc ngân sách lượt gọi công cụ mỗi phiên
 MOC_NGU_CANH = (150_000,)  # mốc nhắc mềm: token gửi lại MỖI lượt
 # Mốc hộp duyệt. Nhắc mềm 150K/250K/350K bị bỏ qua ở cả 5 phiên trước 11/10 => chuyển quyết định sang người dùng.
@@ -41,15 +41,28 @@ MOC_CONG_NGU_CANH = (170_000,)
 HOP_DONG = Path("D:/codevstdio")  # cwd nằm dưới đây thì CLAUDE.md đã nạp, khỏi chèn bản nhắc trùng
 GOC_REPO = HOP_DONG / "repo"      # mỗi thư mục con là một repo có bộ nhớ docs/knowledge/ riêng (§13)
 NGUONG_TRANG_THAI = 6_000  # byte. trang_thai.md lớn hơn -> cảnh báo đầu phiên (CredX 15/11: 20 KB ≈ 10K token)
+# Lỗi quyền thật trong transcript 26/11 (Permission denied, Errno 13, Access is denied) + mã của backend sandbox
+# (Seatbelt EPERM, Landlock EACCES, bwrap EROFS). Khớp nhầm lỗi quyền thường: lời nhắc sandbox thay
+# cho đếm ngắt mạch §7 ở lệnh đó (ponytail: đoán theo chữ, cần phân biệt chắc thì đọc mã thoát của sandbox).
+MAU_SANDBOX = re.compile(r"Access is denied|Operation not permitted|Permission denied|EPERM|EACCES|EROFS"
+                         r"|Read-only file system|sandbox", re.I)
+HUONG_DAN_NEN = ("Tóm tắt đủ 8 mục, mục trống ghi «(không)»: Yêu cầu & ý định · Khái niệm kỹ thuật · Tệp & mã "
+                 "(đường dẫn: vì sao, đã đổi gì) · Lỗi & cách sửa · Việc đang chờ · Việc đang làm · Bước tiếp · Ngữ "
+                 "cảnh then chốt. Giữ nguyên văn đường dẫn, lệnh, chuỗi lỗi, con số; ghi đúng lời người dùng sửa; có "
+                 "bản tóm tắt cũ thì gộp, bỏ điều đã cũ.")  # PreCompact in ra -> Claude Code dùng làm hướng dẫn tóm tắt
+TEP_HUONG_DAN = {"claude.md", "agents.md"}  # sửa tệp hướng dẫn không kéo cổng xác minh / bàn giao / báo cáo
 MAU_BAN_GIAO = re.compile(r"docs/knowledge/(trang_thai\.md$|nhat_ky/)")  # đường dẫn con trong repo, đã chuẩn hoá
 MAU_MUC_TIEP = re.compile(r"^(#+)[^\n]*\b(tiếp theo|next)\b[^\n]*$", re.I | re.M)
+TRAN_TU_LUAT = 1_925  # từ (str.split) của codevstdio/CLAUDE.md + luật `@`. Đo 26/11: 1.832 (+5%) sau khi chuyển khuôn
+#                       nén sang HUONG_DAN_NEN. Nâng trần phải ghi lý do
 NGUONG_SO_TEP = 12         # ghi sang tệp thứ 13 khác nhau -> soát lại phạm vi §5
 CONG_CU_GHI = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 CONG_CU_LENH = ("Bash", "PowerShell")
 PLUGIN_BAT_BUOC = ("superpowers@claude-plugins-official", "ponytail@ponytail")  # người dùng chốt 15/11/2026
 SKILL_XAC_MINH = "superpowers:verification-before-completion"
 NGUONG_DOC_LON = 200_000  # byte. Đo 15/11: Read ~23% kết quả công cụ đưa vào ngữ cảnh
-DUOI_NHI_PHAN = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".pdf")  # Read tự thu nhỏ / chia trang
+DUOI_NHI_PHAN = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")  # Read tự thu nhỏ. PDF không: đo 25/11 một lần đọc ~70K token
+NGUONG_DOC_LAI = 2  # Read cùng tham số, tệp chưa đổi, đã 2 lần từ lần nén cuối -> chặn lần 3 (đo 25/11: một tệp đọc 130 lần)
 
 _I = re.IGNORECASE
 # §9 — danh sách cấm cứng: không chặn hẳn mà chuyển thành hộp thoại duyệt, để người dùng
@@ -80,7 +93,8 @@ VO_SHELL = {"bash", "sh", "cmd", "powershell", "pwsh"}
 CO_VO_SHELL = {"-c", "-command", "/c"}
 THONG_DICH = VO_SHELL | {"iex", "invoke-expression", "eval", "source", "xargs"}  # có mặt -> tham số lệnh dữ liệu cũng là lệnh
 # Cổng quy trình tắt được bằng HARNESS_TAT=a,b (để có nhánh «off» khi đo); bi-mat-*, pha-huy thì không.
-CONG_TAT_DUOC = ("superpowers", "doc-lon", "ngu-canh", "xac-minh", "ban-giao")
+CONG_TAT_DUOC = ("superpowers", "doc-lon", "doc-lai", "ngu-canh", "xac-minh", "ban-giao", "bao-cao")
+NHAN_BAO_CAO = ("ĐÃ KIỂM CHỨNG", "CHƯA KIỂM CHỨNG", "THẤT BẠI", "ĐÃ BỎ QUA", "GIẢ ĐỊNH", "CÔNG CỤ ĐÃ DÙNG")
 MAU_PIP = re.compile(r"\bpip3?(\.exe)?\s+install\b|-m\s+pip\s+install\b", _I)
 MAU_CO_VENV = re.compile(r"venv|conda|virtualenv|\buv\s+pip\b", _I)
 MAU_BI_MAT = (
@@ -165,10 +179,12 @@ def ghi_vet(sid, ban_ghi):
 
 
 def la_tep_du_an(p):
-    """Tệp dự án: dưới HOP_DONG hoặc trong một git work tree; trừ scratchpad, ~/.claude và mọi thư mục .claude."""
+    """Tệp dự án: dưới HOP_DONG hoặc trong một git work tree; trừ scratchpad, ~/.claude, mọi thư mục .claude và
+    tệp hướng dẫn CLAUDE.md / AGENTS.md."""
     p = Path(p)
     s = chuan_hoa(str(p))
-    if "scratchpad" in s or s.startswith(chuan_hoa(str(CLAUDE_DIR))) or f"{os.sep}.claude{os.sep}" in s:
+    if ("scratchpad" in s or s.startswith(chuan_hoa(str(CLAUDE_DIR))) or f"{os.sep}.claude{os.sep}" in s
+            or p.name.lower() in TEP_HUONG_DAN):
         return False
     return s.startswith(chuan_hoa(str(HOP_DONG)) + os.sep) or any((d / ".git").exists() for d in p.parents)
 
@@ -179,13 +195,19 @@ def goi_skill(b, tien_to):
 
 
 def thieu_xac_minh(goi):
-    """Số tệp dự án đã ghi sau lần gọi verification-before-completion cuối cùng (0 = đủ)."""
-    tep = set()
+    """Số tệp dự án chưa được xác minh (0 = đủ): sau lần ghi cuối phải có cả skill verification-before-completion
+    lẫn một lệnh Bash/PowerShell chạy thành công. Harness không biết lệnh đó có kiểm đúng chỗ không (§8 vẫn đòi nói)."""
+    tep, skill, lenh = set(), False, False
     for b in goi:
-        if goi_skill(b, SKILL_XAC_MINH):
-            tep.clear()
-        elif b.get("tep") and la_tep_du_an(b["tep"]):
+        if b.get("tep") and la_tep_du_an(b["tep"]):
             tep.add(chuan_hoa(b["tep"]))
+            skill = lenh = False
+        elif goi_skill(b, SKILL_XAC_MINH):
+            skill = True
+        elif b.get("cong_cu") in CONG_CU_LENH and b.get("ok"):
+            lenh = True
+        if skill and lenh:
+            tep.clear()
     return len(tep)
 
 
@@ -312,16 +334,33 @@ def cong_superpowers(vao):
                       "executing-plans (IMPLEMENT), systematic-debugging (lỗi) — rồi ghi lại.")
 
 
+def ky_goi(ten, tham_so):
+    return hashlib.sha1((ten + json.dumps(tham_so, sort_keys=True, ensure_ascii=False, default=str))
+                        .encode("utf-8")).hexdigest()[:12]
+
+
 def cong_doc_lon(vao):
-    """§11: Read trọn tệp văn bản > NGUONG_DOC_LON mà không offset/limit -> từ chối, chỉ cách đọc đúng đoạn."""
+    """§11: Read trọn tệp > NGUONG_DOC_LON không offset/limit/pages, hoặc đọc lại tệp chưa đổi -> từ chối."""
     tham_so = vao.get("tool_input") or {}
     p = Path(duong_dan_tep(tham_so) or ".")
-    if (vao.get("tool_name") != "Read" or any(k in tham_so for k in ("offset", "limit", "pages"))
-            or p.suffix.lower() in DUOI_NHI_PHAN or not p.is_file() or p.stat().st_size <= NGUONG_DOC_LON):
+    if vao.get("tool_name") != "Read" or not p.is_file():
         return False
+    ky, mt = ky_goi("Read", tham_so), p.stat().st_mtime
+    vet = doc_vet(vao.get("session_id", ""))
+    nen = max((i for i, b in enumerate(vet) if b.get("loai") == "nen"), default=-1)
+    lan = sum(1 for b in vet[nen + 1:] if b.get("loai") == "goi" and b.get("ok") and b.get("ky") == ky and b.get("mt") == mt)
+    if lan >= NGUONG_DOC_LAI and quyet_dinh(vao, "doc-lai", "deny",
+                                            f"[HARNESS §11] Chặn đọc lại: `{p.name}` đã đọc {lan} lần cùng tham số, tệp chưa đổi — nội dung "
+                                            "vẫn trong ngữ cảnh, dùng lại. Cần đoạn khác thì đổi offset/limit."):
+        return True
+    if (any(k in tham_so for k in ("offset", "limit", "pages")) or p.suffix.lower() in DUOI_NHI_PHAN
+            or p.stat().st_size <= NGUONG_DOC_LON):
+        return False
+    cach = ("kèm `pages` (vd \"1-5\"), hoặc `pdftotext` ra scratchpad rồi grep" if p.suffix.lower() == ".pdf"
+            else "tìm vị trí bằng `grep -n` rồi Read có offset/limit; cần cả tệp thì gọi lại kèm limit tường minh")
     return quyet_dinh(vao, "doc-lon", "deny",
                       f"[HARNESS §11] `{p.name}` {p.stat().st_size // 1000} KB — đọc trọn sẽ nằm lại trong ngữ cảnh đến "
-                      "hết phiên. Tìm vị trí bằng `grep -n` rồi Read có offset/limit; cần cả tệp thì gọi lại kèm limit tường minh.")
+                      f"hết phiên. Đọc {cach}.")
 
 
 def cong_ngu_canh(vao):
@@ -379,25 +418,39 @@ def sau_cong_cu():
     truoc = doc_vet(sid)
     goi = [b for b in truoc if b.get("loai") == "goi"]
     ban_ghi = {"t": bay_gio(), "loai": "goi", "cong_cu": ten, "ok": ok, "tom_tat": tom_tat(ten, tham_so),
-               "ky": hashlib.sha1((ten + json.dumps(tham_so, sort_keys=True, ensure_ascii=False, default=str))
-                                  .encode("utf-8")).hexdigest()[:12]}
+               "ky": ky_goi(ten, tham_so)}
+    if ten == "Read" and ok:
+        try:
+            ban_ghi["mt"] = Path(duong_dan_tep(tham_so)).stat().st_mtime  # cổng doc-lai: tệp đổi thì được đọc lại
+        except (OSError, TypeError):
+            pass
     if not truoc:
         ban_ghi["cwd"] = vao.get("cwd", "")
     tep = duong_dan_tep(tham_so) if ten in CONG_CU_GHI and ok else ""
     if tep:
         ban_ghi["tep"] = tep
+    if not ok and ten in CONG_CU_LENH and MAU_SANDBOX.search(str(vao.get("error") or "")):
+        ban_ghi["sandbox"] = True
     ghi_vet(sid, ban_ghi)
 
     canh_bao = []  # (khoá, thông điệp)
     da_ban = {b.get("khoa") for b in truoc if b.get("loai") == "day-ngat"}
     # Dây ngắt 0 — vòng lặp: NGUONG_LAP lượt liền cùng công cụ + tham số, kể cả lượt thành công.
     ky = ban_ghi["ky"]
-    if [b.get("ky") for b in goi[-(NGUONG_LAP - 1):]] == [ky] * (NGUONG_LAP - 1) and f"lap-{ky}" not in da_ban:
-        canh_bao.append((f"lap-{ky}", f"Cùng một lượt gọi đã lặp {NGUONG_LAP} lần liền — có thể đang vòng lặp. "
-                                      "§7: đổi cách tiếp cận hoặc báo người dùng; §11: đừng đọc lại tệp chưa đổi."))
+    for n in NGUONG_LAP:
+        if [b.get("ky") for b in goi[-(n - 1):]] == [ky] * (n - 1) and f"lap{n}-{ky}" not in da_ban:
+            canh_bao.append((f"lap{n}-{ky}", f"Cùng một lượt gọi đã lặp {n} lần liền — có thể đang vòng lặp. "
+                                             "§7: đổi cách tiếp cận hoặc báo người dùng; §11: đừng đọc lại tệp chưa đổi."
+                             if n == NGUONG_LAP[0] else
+                             f"Vẫn vòng lặp: {ten} lặp {n} lần liền với `{ban_ghi['tom_tat'][:200]}` — đừng gọi lại đúng "
+                             "tham số này; nêu điều đã thấy, đổi hướng, hoặc dừng và hỏi người dùng."))
+    # Sandbox chặn không phải lỗi mã: nhắc một lần, không tính vào ngắt mạch.
+    if ban_ghi.get("sandbox") and "sandbox" not in da_ban:
+        canh_bao.append(("sandbox", "Lệnh hỏng vì quyền truy cập — nhiều khả năng sandbox chặn, không phải lỗi mã. Đừng đổi "
+                                    "lệnh vòng vèo; báo người dùng, hoặc xin chạy ngoài sandbox kèm lý do."))
     # Dây ngắt 1 — §7 ngắt mạch: cùng một lệnh thất bại lặp lại.
-    if not ok and ten in CONG_CU_LENH:
-        lan = 1 + sum(1 for b in goi if not b.get("ok") and b.get("tom_tat") == ban_ghi["tom_tat"])
+    if not ok and ten in CONG_CU_LENH and not ban_ghi.get("sandbox"):
+        lan = 1 + sum(1 for b in goi if not b.get("ok") and not b.get("sandbox") and b.get("tom_tat") == ban_ghi["tom_tat"])
         if lan >= NGUONG_THAT_BAI:
             canh_bao.append(("that-bai-lap", f"Lệnh này đã thất bại {lan} lần trong phiên. §7 ngắt mạch: DỪNG sửa-thử, "
                                              "báo cáo lỗi kèm log nguyên văn, liệt kê giả thuyết đã loại, chờ người dùng."))
@@ -517,11 +570,30 @@ def prompt_cuoi(duong_dan):
     return ""
 
 
+def tin_cuoi(duong_dan):
+    """Chữ của tin nhắn trợ lý cuối cùng trong transcript (dự phòng khi Stop thiếu `last_assistant_message`)."""
+    for d in reversed(dong_cuoi(duong_dan)):
+        if '"assistant"' not in d:
+            continue
+        try:
+            nd = (json.loads(d).get("message") or {}).get("content")
+        except ValueError:
+            continue
+        s = " ".join(k.get("text") or "" for k in nd if isinstance(k, dict) and k.get("type") == "text") \
+            if isinstance(nd, list) else str(nd or "")
+        if s.strip():
+            return s
+    return ""
+
+
 def ket_phien(truoc_nen=False):
     """Stop: ghi tổng kết + giữ lượt khi thiếu xác minh/bàn giao. PreCompact (truoc_nen): chỉ ghi tổng kết."""
     vao = doc_dau_vao()
     sid = vao.get("session_id", "")
     vet = doc_vet(sid)
+    if truoc_nen:
+        ghi_vet(sid, {"t": bay_gio(), "loai": "nen"})  # sau nén, nội dung đã đọc mất khỏi ngữ cảnh -> cổng doc-lai đếm lại
+        sys.stdout.buffer.write(HUONG_DAN_NEN.encode("utf-8"))  # PreCompact: stdout = hướng dẫn cho bản tóm tắt
     goi = [b for b in vet if b.get("loai") == "goi"]
     p_tk = VET_TONG_KET / f"{sid or 'khong-ro'}.json"
     cu = doc_json(p_tk, {})
@@ -553,20 +625,35 @@ def ket_phien(truoc_nen=False):
         tk["ban_giao_luc"] = so_ghi_repo
     if repo_no and not ghi_cong(vao, "ban-giao", "block"):
         repo_no = []
-    nhac = not (chan or repo_no or dung or tk["ban_giao_luc"]) and len(tep) > tk["so_tep_luc_nhac"]
+    # §8: tin cuối không có nhãn phân loại sau một đợt ghi tệp dự án -> giữ lượt, mỗi đợt ghi một lần.
+    so_ghi = sum(1 for b in goi if b.get("tep") and la_tep_du_an(b["tep"]))
+    tk["bao_cao_luc"] = cu.get("bao_cao_luc", 0)
+    thieu_nhan = False
+    if not (chan or repo_no or dung) and so_ghi > tk["bao_cao_luc"]:
+        tin = vao.get("last_assistant_message") or tin_cuoi(vao.get("transcript_path", ""))
+        thieu_nhan = bool(tin.strip()) and not any(n in tin for n in NHAN_BAO_CAO)
+        if thieu_nhan:
+            tk["bao_cao_luc"] = so_ghi
+            thieu_nhan = ghi_cong(vao, "bao-cao", "block")
+    nhac = not (chan or repo_no or dung or thieu_nhan or tk["ban_giao_luc"]) and len(tep) > tk["so_tep_luc_nhac"]
     if nhac:
         tk["so_tep_luc_nhac"] = len(tep)
     VET_TONG_KET.mkdir(parents=True, exist_ok=True)
     p_tk.write_text(json.dumps(tk, ensure_ascii=False, indent=1), encoding="utf-8")
     ly_do = []
     if chan:
-        ly_do.append(f"[HARNESS §5] {chan} tệp dự án đã ghi nhưng chưa gọi `{SKILL_XAC_MINH}` "
-                     "sau lần ghi cuối. Gọi skill đó, chạy kiểm chứng, rồi mới báo xong.")
+        ly_do.append(f"[HARNESS §5] {chan} tệp dự án đã ghi mà sau lần ghi cuối chưa có đủ: gọi `{SKILL_XAC_MINH}` "
+                     "và chạy thành công một lệnh kiểm (test, build, chạy thử). Làm đủ hai việc rồi mới báo xong; không "
+                     "có lệnh kiểm nào hợp thì chạy một lệnh đọc lại kết quả và ghi CHƯA KIỂM CHỨNG.")
     if repo_no:
         noi = ", ".join(str(GOC_REPO / r / "docs" / "knowledge") for r in repo_no)
         ly_do.append(f"[HARNESS §13] Đã sửa tệp dự án mà sau lần ghi cuối chưa ghi bàn giao ở: {noi}. Viết ngắn: nối "
                      "`nhat_ky/<YYYY-MM-DD>.md` (đã làm gì · đã chốt gì · còn nợ gì) hoặc sửa mục «Tiếp theo» của "
                      "`trang_thai.md`. Việc vặt không đáng ghi thì nói một câu rồi dừng — chỉ giữ một lần.")
+    if thieu_nhan:
+        ly_do.append("[HARNESS §8] Đã ghi tệp dự án mà tin nhắn cuối không có nhãn báo cáo (ĐÃ KIỂM CHỨNG / CHƯA KIỂM "
+                     "CHỨNG / THẤT BẠI / ĐÃ BỎ QUA / GIẢ ĐỊNH / CÔNG CỤ ĐÃ DÙNG). Viết báo cáo phân loại; đang hỏi "
+                     "người dùng giữa chừng thì nói một câu rồi dừng — chỉ giữ một lần.")
     if ly_do:
         xuat({"decision": "block", "reason": " ".join(ly_do)})
     elif nhac:
@@ -653,12 +740,27 @@ def soat_plugin():
     return dong
 
 
+def lech_ban_cai(chep, goc):
+    """Bản chép CLAUDE.md (D:\\codevstdio, do cai-dat.ps1 tạo) thiếu hoặc khác bản gốc trong repo -> câu cảnh báo."""
+    if not Path(goc).is_file():
+        return None
+    if not Path(chep).is_file():
+        return f"- ⚠️ thiếu {chep} — luật harness không nạp; chạy lại cai-dat.ps1."
+    if Path(chep).read_bytes() != Path(goc).read_bytes():
+        return (f"- ⚠️ {chep} lệch {goc} — luật đang nạp là bản cũ. Báo người dùng chạy lại cai-dat.ps1 "
+                "(hoặc cho phép chép đè).")
+    return None
+
+
 def bat_dau():
     vao = doc_dau_vao()
     cwd = Path(vao.get("cwd") or ".")
     c, h = chuan_hoa(str(cwd.resolve())), chuan_hoa(str(HOP_DONG))
     # Dưới HOP_DONG thì CLAUDE.md (§1–16) đã nạp đủ — chèn thêm bản nhắc là trả hai lần mỗi lượt.
     dong = [] if c == h or c.startswith(h + os.sep) else [(GOC / "NHAC-DINH-TUYEN.md").read_text(encoding="utf-8").strip()]
+    if cwd.resolve().parent == cwd.resolve():
+        dong.append("- ⚠️ §11: phiên mở ở gốc ổ đĩa — không nạp AGENTS.md của repo nào (đo 25/11: 38 phiên ở D:\\ chiếm 27% "
+                    "quota, toàn phiên dài nhất). Việc dự án: đề nghị người dùng mở lại phiên trong thư mục repo.")
     r = repo_cua(c)
     goc = GOC_REPO / r[0] if r else cwd  # cwd ở thư mục con của repo -> vẫn lấy bộ nhớ ở gốc repo
     if (goc / "AGENTS.md").is_file():
@@ -674,6 +776,9 @@ def bat_dau():
     if truoc:
         dong.append(truoc)
     dong += soat_plugin()
+    lech = lech_ban_cai(HOP_DONG / "CLAUDE.md", GOC / "codevstdio" / "CLAUDE.md")
+    if lech:
+        dong.append(lech)
     if not dong:
         return
     xuat({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "\n".join(dong)}})
@@ -1002,6 +1107,11 @@ def tu_kiem_bat_buoc():
             assert phan_tich_lenh(s), f"lọt lệnh phá huỷ: {s!r}"
         for s in ['echo "rm -rf la lenh nguy hiem"', 'grep -n "git push" README.md', "git -C repo status"]:
             assert not phan_tich_lenh(s), f"hỏi thừa: {s!r}"
+        # §11: luật nạp sẵn không được phình lại âm thầm.
+        hd = GOC / "codevstdio" / "CLAUDE.md"
+        nap = [hd] + [hd.parent / d[1:].strip() for d in hd.read_text(encoding="utf-8").splitlines() if d.startswith("@")]
+        so_tu = sum(len(p.read_text(encoding="utf-8").split()) for p in nap)
+        assert so_tu <= TRAN_TU_LUAT, f"luật nạp sẵn {so_tu} từ > trần {TRAN_TU_LUAT} — rút gọn, hoặc nâng trần kèm lý do"
         # Vết hỏng (tệp bị khoá, đĩa đầy) không được làm câm cổng an ninh.
         goc = ghi_vet
         def hong(*_):
@@ -1021,6 +1131,31 @@ def tu_kiem_bat_buoc():
         assert thieu_ban_giao([g(du_an), g(goc_gia / "docs/knowledge/nhat_ky/2026-11-15.md")]) == [], "đã ghi nhật ký mà vẫn đòi"
         assert thieu_ban_giao([g(trang_thai), g(du_an)]) == ["_tu_kiem"], "ghi trang_thai TRƯỚC lần ghi cuối mà coi là xong"
         assert thieu_ban_giao([g(HOP_DONG / "x.md"), g(ngoai)]) == [], "tệp ngoài repo/ bị đòi bàn giao"
+        # Tệp hướng dẫn (CLAUDE.md, AGENTS.md) không kéo theo cổng xác minh / bàn giao / báo cáo.
+        hd_nho = [g(goc_gia / "CLAUDE.md"), g(goc_gia / "AGENTS.md")]
+        assert thieu_ban_giao(hd_nho) == [] and thieu_xac_minh(hd_nho) == 0, "sửa CLAUDE.md/AGENTS.md mà bị giữ lượt"
+        # Xác minh = skill + một lệnh chạy thành công, cả hai SAU lần ghi cuối.
+        sk = {"loai": "goi", "cong_cu": "Skill", "ok": True, "tom_tat": SKILL_XAC_MINH}
+        kt = {"loai": "goi", "cong_cu": "Bash", "ok": True, "tom_tat": "pytest"}
+        assert thieu_xac_minh([g(du_an), sk]) == 1, "gọi skill xác minh mà không chạy lệnh kiểm nào vẫn cho qua"
+        assert thieu_xac_minh([g(du_an), {**kt, "ok": False}, sk]) == 1, "lệnh kiểm hỏng mà tính là đã kiểm"
+        assert thieu_xac_minh([kt, g(du_an), sk]) == 1, "lệnh kiểm TRƯỚC lần ghi cuối mà tính là đã kiểm"
+        assert thieu_xac_minh([g(du_an), kt, sk]) == 0, "đã gọi skill + chạy lệnh kiểm mà vẫn giữ"
+        # Mẫu lỗi sandbox: lấy từ lỗi thật trong transcript (26/11) + mã lỗi của các backend sandbox.
+        for s in ["/usr/bin/bash: line 1: /probe.py: Permission denied", "Remove-Item : Access is denied",
+                  "ls: cannot open 'x': Operation not permitted", "Error: EPERM: operation not permitted, open 'x'",
+                  "PermissionError: [Errno 13] Permission denied: 'D:/x.csv'", "touch: x: Read-only file system",
+                  "Error: EACCES: permission denied", "Error: EROFS: read-only file system"]:
+            assert MAU_SANDBOX.search(s), f"lỗi quyền thật không khớp mẫu sandbox: {s!r}"
+        assert not MAU_SANDBOX.search("SyntaxError: invalid syntax"), "lỗi mã bị coi là sandbox"
+        # Bản chép CLAUDE.md ở D:\codevstdio lệch bản gốc -> cảnh báo đầu phiên.
+        c1, c2 = tam / "c1.md", tam / "c2.md"
+        c1.write_text("x", encoding="utf-8")
+        c2.write_text("x", encoding="utf-8")
+        assert lech_ban_cai(c1, c2) is None, "hai bản giống nhau mà báo lệch"
+        c2.write_text("y", encoding="utf-8")
+        assert "cai-dat.ps1" in (lech_ban_cai(c1, c2) or ""), "bản chép lệch mà không cảnh báo"
+        assert "thiếu" in (lech_ban_cai(tam / "khong.md", c2) or ""), "thiếu bản chép mà không cảnh báo"
         assert muc_tiep_theo("# T\nđầu\n## Việc tiếp theo\n- b\n### con\n- c\n## Khác\n- d") == ("- b\n### con\n- c", True)
         assert muc_tiep_theo("# T\n" + "x" * 3000) == (("# T\n" + "x" * 3000)[:1500], False), "thiếu mục thì phải lấy 1,5 KB đầu"
         kn = tam / "r" / "docs" / "knowledge"
@@ -1048,15 +1183,28 @@ def tu_kiem_bat_buoc():
         assert cong("xac-minh", "block") and cong("ban-giao", "block"), "giữ lượt ở Stop mà không ghi vết"
         assert chay("ket-phien", stop_hook_active=True) == "", "giữ lượt lặp vô hạn"
         chay("sau-cong-cu", **skill(SKILL_XAC_MINH))
+        assert "lệnh kiểm" in chay("ket-phien"), "gọi skill xác minh mà chưa chạy lệnh kiểm nào vẫn cho qua"
+        chay("sau-cong-cu", **lenh("python -m pytest"))
         assert '"block"' not in chay("ket-phien"), "đã nhắc bàn giao cho lần ghi này rồi mà vẫn giữ lần hai"
         chay("sau-cong-cu", **ghi(du_an))
         chay("sau-cong-cu", **skill(SKILL_XAC_MINH))
+        chay("sau-cong-cu", **lenh("python -m pytest"))
         o = chay("ket-phien")
         assert '"block"' in o and "§13" in o, "ghi mới sau lần nhắc mà không nhắc bàn giao lại"
         chay("sau-cong-cu", **ghi(du_an))
         chay("sau-cong-cu", **ghi(trang_thai))
         chay("sau-cong-cu", **skill(SKILL_XAC_MINH))
+        chay("sau-cong-cu", **lenh("python -m pytest"))
         assert chay("ket-phien") == "", "đã ghi trang_thai.md sau lần ghi cuối mà vẫn bị giữ / nhắc §13 lần nữa"
+        # §8: báo xong mà tin nhắn cuối không có nhãn báo cáo -> giữ lượt một lần cho mỗi đợt ghi.
+        def tin(s):
+            p = tam / "tx_bc.jsonl"
+            p.write_text(json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": s}]}}) + "\n",
+                         encoding="utf-8")
+            return str(p)
+        assert chay("ket-phien", transcript_path=tin("ĐÃ KIỂM CHỨNG chạy x, đạt")) == "", "có nhãn §8 mà vẫn giữ lượt"
+        assert "§8" in chay("ket-phien", transcript_path=tin("Xong rồi.")), "báo xong không nhãn §8 mà không giữ lượt"
+        assert chay("ket-phien", transcript_path=tin("Xong rồi.")) == "", "giữ lượt §8 hai lần cho cùng đợt ghi"
         # Tổng kết tất định + `tim`.
         tx = tam / "transcript.jsonl"
         tx.write_text(json.dumps({"type": "user", "message": {"content": f"sửa giúp {sid} password=abc123"}}) + "\n"
@@ -1068,14 +1216,43 @@ def tu_kiem_bat_buoc():
         assert tk.get("lenh_that_bai") == ["python hong.py"], tk.get("lenh_that_bai")
         assert sid in tk.get("prompt_cuoi", "") and "abc123" not in tk["prompt_cuoi"], tk.get("prompt_cuoi")
         assert f"{sid}.json:" in chay("tim", sid), "`tim` không thấy tổng kết phiên"
+        # Bị sandbox chặn: nhắc riêng, không tính vào ngắt mạch §7.
+        sb = dict(hook_event_name="PostToolUseFailure", tool_name="Bash", tool_input={"command": "ls D:/sb"},
+                  error="ls: cannot open 'D:/sb': Operation not permitted")
+        assert "sandbox" in chay("sau-cong-cu", **sb), "lỗi sandbox mà không nhắc"
+        assert "ngắt mạch" not in chay("sau-cong-cu", **sb), "lỗi sandbox bị tính vào ngắt mạch §7"
         lon.write_text("x" * 250_000, encoding="utf-8")
         doc = lambda **ts: {"tool_name": "Read", "tool_input": {"file_path": str(lon), **ts}}
         assert "§11" in chay("canh-cong", **doc()), "đọc trọn tệp lớn mà không bị chặn"
         assert chay("canh-cong", **doc(limit=50)) == "", "đọc có limit mà vẫn bị chặn"
+        pdf = tam / "lon.pdf"
+        pdf.write_bytes(b"%PDF" + b"x" * 250_000)
+        doc_pdf = lambda **ts: {"tool_name": "Read", "tool_input": {"file_path": str(pdf), **ts}}
+        assert "pages" in chay("canh-cong", **doc_pdf()), "đọc trọn PDF lớn mà không bị chặn"
+        assert chay("canh-cong", **doc_pdf(pages="1-3")) == "", "PDF có pages mà vẫn bị chặn"
+        nho = tam / "nho.txt"
+        nho.write_text("abc", encoding="utf-8")
+        doc_nho = {"tool_name": "Read", "tool_input": {"file_path": str(nho)}}
+        chay("sau-cong-cu", **doc_nho)
+        assert chay("canh-cong", **doc_nho) == "", "đọc lại lần 2 đã bị chặn"
+        chay("sau-cong-cu", **lenh("echo xen giua"))
+        chay("sau-cong-cu", **doc_nho)
+        assert "đọc lại" in chay("canh-cong", **doc_nho), "đọc lần 3 tệp chưa đổi mà không bị chặn"
+        os.utime(nho, (nho.stat().st_atime, nho.stat().st_mtime + 5))
+        assert chay("canh-cong", **doc_nho) == "", "tệp đã đổi mà vẫn chặn đọc lại"
+        chay("sau-cong-cu", **doc_nho)
+        chay("sau-cong-cu", **doc_nho)
+        o = chay("truoc-nen", cwd=str(tam), transcript_path=str(tx))
+        assert "8 mục" in o and "Việc đang làm" in o, "PreCompact không đưa khuôn tóm tắt 8 mục cho bản nén"
+        assert chay("canh-cong", **doc_nho) == "", "sau nén ngữ cảnh mà vẫn chặn đọc lại"
+        goc_o = Path(tam.anchor)
+        assert "gốc ổ đĩa" in chay("bat-dau", cwd=str(goc_o)), "mở phiên ở gốc ổ đĩa mà không cảnh báo"
+        assert "gốc ổ đĩa" not in chay("bat-dau", cwd=str(tam)), "cảnh báo gốc ổ đĩa nhầm"
         assert "superpowers" in chay("do-cong"), "do-cong không thấy cổng của phiên giả"
         doc_lai = lambda **ts: {"tool_name": "Read", "tool_input": {"file_path": du_an, **ts}}
-        o = [chay("sau-cong-cu", **doc_lai()) for _ in range(5)]
+        o = [chay("sau-cong-cu", **doc_lai()) for _ in range(8)]
         assert "vòng lặp" not in o[3] and "vòng lặp" in o[4], "5 lượt giống hệt mà không cảnh báo"
+        assert "đừng gọi lại" not in o[6] and "đừng gọi lại" in o[7], "8 lượt giống hệt mà không nhắc chi tiết"
         assert not any("vòng lặp" in chay("sau-cong-cu", **doc_lai(offset=i)) for i in range(5)), "khác offset mà báo lặp"
         # Hộp duyệt ngữ cảnh phải bắn TRƯỚC autoCompact 200K, và lời nhắc là mệnh lệnh checkpoint.
         tx_lon = tam / "tx_lon.jsonl"

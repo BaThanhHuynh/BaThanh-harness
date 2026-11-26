@@ -162,6 +162,13 @@ Lưu ý: `claude plugin details` ghi hook là «không tốn ngữ cảnh» — 
 - **22/11 (đợt 2, CredX):** `AGENTS.md` 8.937 → 7.576 byte (−1.361): bỏ câu trùng §1/§5/§8/§9/§11/§13, lịch sử gói tuần 6/7
   (đã ở `quy_trinh_lam_viec.md`), số làm bằng chứng ở §3/§5 (nguyên văn còn ở `luat_cung_bay_du_lieu.md`); giữ số mục §1–§7
   và mọi số quyết định. Bản cũ duy nhất (`.gitignore`): `sao-luu/2026-11-22/truoc-rut-gon-agents/CredX/`.
+- **26/11 (sửa hạn chế sau đợt deepseek):** (1) cổng `xac-minh` đòi cả skill verification lẫn một lệnh Bash/PowerShell
+  chạy thành công, cả hai sau lần ghi cuối — vẫn không biết lệnh đó có kiểm đúng chỗ. (2) sửa `CLAUDE.md` / `AGENTS.md`
+  không kéo cổng `superpowers` / `xac-minh` / `ban-giao` / `bao-cao`. (3) `MAU_SANDBOX` thêm `Permission denied`,
+  `EACCES`, `EROFS`, `Read-only file system` (lỗi thật trong transcript + mã của backend sandbox). (4) Khuôn tóm tắt 8 mục
+  chuyển từ `CLAUDE.md` sang `HUONG_DAN_NEN`; `truoc-nen` in ra stdout — tài liệu hook: stdout của PreCompact là hướng dẫn
+  cho bản tóm tắt (bản nén 26/11 bỏ qua khuôn khi nó nằm trong `CLAUDE.md`). Luật nạp sẵn 1.914 → 1.832 từ, trần 1.925.
+  (5) `bat-dau` cảnh báo khi `D:\codevstdio\CLAUDE.md` thiếu hoặc lệch bản gốc.
 - **15/11 (đợt 3, 5 sửa):** `permissions.deny`/`ask` native trong `settings.json` (chặn sửa `.env`/khoá, hỏi trước
   `git push`/`reset --hard`/`clean`/`rebase`/`branch -D`/`rm -r`, đọc `.env`) — lớp chắn không phụ thuộc hook fail-open;
   `autoMode.environment` tin mọi repo dưới `D:\codevstdio\repo\`; `NHAC-DINH-TUYEN.md` thêm dòng phân định định dạng;

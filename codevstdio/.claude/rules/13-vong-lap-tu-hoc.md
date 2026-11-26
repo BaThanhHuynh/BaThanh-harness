@@ -27,6 +27,15 @@ khỏi tri thức: đó là lịch sử.
 còn dùng lên `AGENTS.md` / `docs/knowledge/`. Thêm xong thì dựng lại chỉ mục và đọc dòng cảnh báo trùng:
 `python ~/.claude/harness/harness.py chi-muc <thư mục nhật ký> <tệp chỉ mục> --ghi-de`
 
-**Khuôn:** lỗi = triệu chứng → nguyên nhân → cách sửa → vì sao đúng. Phiên = đã làm gì · đã chốt gì · còn nợ
-gì (thiếu trường giữa thì phiên sau đề xuất lại đúng cái đã bị loại). Cả hai kèm bằng chứng đo được (mã trả
-về, kích thước tệp, con số). Trước khi bắt tay việc mới, đọc tri thức của repo.
+**Khuôn:** lỗi = triệu chứng → nguyên nhân → cách sửa → vì sao đúng → vì sao kiểm tra không bắt được → rào
+chắn đã thêm (test fail khi lỗi quay lại, hoặc cảm biến). Phiên = đã làm gì · đã chốt gì + phương án đã loại
+và vì sao · còn nợ gì (thiếu trường giữa thì phiên sau đề xuất lại đúng cái đã bị loại). Cả hai kèm bằng chứng
+đo được (mã trả về, kích thước tệp, con số). Trước khi bắt tay việc mới, đọc tri thức của repo.
+
+**Quyết định lâu dài** → `docs/knowledge/quyet_dinh/<YYYY-MM-DD>-<chu-de>.md`, dòng đầu `Trạng thái: đề xuất |
+đã làm | bác bỏ — <lý do một dòng>`, các mục Vấn đề · Quyết định · Phương án đã cân nhắc · Hệ quả. Ghi chú bác
+bỏ chỉ giữ khi ý tưởng đó còn hấp dẫn.
+
+**Phép thử bàn giao:** trước khi ghi `nhat_ky/` / `trang_thai.md`, hỏi: người mở phiên mới, không có lịch sử
+chat, có hiểu mọi tham chiếu và kiểm được mọi khẳng định không? Bỏ «như đã bàn», «cách trên», «bản cũ», lời kể
+«đã thử X rồi Y» — viết lại thành sự thật hiện tại.

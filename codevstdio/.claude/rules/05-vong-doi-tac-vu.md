@@ -9,7 +9,7 @@
 | PLAN | Giả định (§1), cách kiểm (§4), `Sẽ sửa · Có thể ảnh hưởng · Không đụng tới` · tiêu chí đo được | mơ hồ / mới → `superpowers:brainstorming`; đã rõ → `superpowers:writing-plans` |
 | IMPLEMENT | Chỉ sửa tệp «Sẽ sửa» | `superpowers:test-driven-development`; có kế hoạch → `superpowers:executing-plans` / `superpowers:subagent-driven-development` |
 | DIAGNOSE | Lỗi, test hỏng, hành vi lạ — trước khi sửa | `superpowers:systematic-debugging` |
-| VERIFY | Kiểm phần liên quan trước, toàn bộ khi thay đổi lan rộng. Không có test: nói đã kiểm bằng cách nào · pass, hoặc hỏng đã báo (§7) | `superpowers:verification-before-completion` |
+| VERIFY | Kiểm hẹp nhất cho phần đã đổi trước, toàn bộ khi thay đổi lan rộng; không chạy lại kiểm vừa pass chỉ vì sắp commit; báo đúng lệnh đã chạy. Không có test: nói đã kiểm bằng cách nào · pass, hoặc hỏng đã báo (§7) | `superpowers:verification-before-completion` |
 | REVIEW_DIFF | §6 | `ponytail:ponytail-review` + `code-review` hoặc `superpowers:requesting-code-review` |
 | REPORT | §8 | — |
 
