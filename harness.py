@@ -12,6 +12,7 @@
   chi-muc      chạy tay               sinh bảng tra «mã mục -> tệp» cho một thư mục tài liệu
   bao-cao      chạy tay               in tổng kết các phiên gần đây
   tim          chạy tay               tra xuyên dự án trong <repo>/docs/knowledge/** và vet/tong-ket/
+  quet-commit  githooks/pre-commit    diff đã stage có dạng bí mật -> exit 2 (chặn commit)
 
 Lỗi nội bộ của hook bị nuốt (ghi vet/loi.log) và thoát 0 — harness hỏng không được làm hỏng phiên.
 """
@@ -29,6 +30,7 @@ CLAUDE_DIR = Path.home() / ".claude"  # không suy từ GOC: repo có thể nằ
 VET_PHIEN = GOC / "vet" / "phien"        # vết từng lượt gọi công cụ, một tệp JSONL mỗi phiên
 VET_TONG_KET = GOC / "vet" / "tong-ket"  # tổng kết mỗi phiên, ghi đè ở mỗi Stop
 LOG_LOI = GOC / "vet" / "loi.log"
+GIU_VET_NGAY = 30  # vết phiên cũ hơn số ngày này bị xoá ở đầu phiên; không dọn thì vet/phien/ phình mãi
 
 NGUONG_THAT_BAI = 2        # §7: cùng một lệnh thất bại từ lần thứ 2 -> DỪNG
 NGUONG_LAP = (5, 8)        # §7/§11: 5 / 8 lượt liền giống hệt (kể cả thành công) -> nhắc / nhắc chi tiết; 3 báo nhầm (ECC)
@@ -41,6 +43,8 @@ MOC_CONG_NGU_CANH = (170_000,)
 HOP_DONG = Path("D:/codevstdio")  # cwd nằm dưới đây thì CLAUDE.md đã nạp, khỏi chèn bản nhắc trùng
 GOC_REPO = HOP_DONG / "repo"      # mỗi thư mục con là một repo có bộ nhớ docs/knowledge/ riêng (§13)
 NGUONG_TRANG_THAI = 6_000  # byte. trang_thai.md lớn hơn -> cảnh báo đầu phiên (CredX 15/11: 20 KB ≈ 10K token)
+NGUONG_TEP_TRI_THUC = 20 * 1024  # byte. Tệp docs/knowledge/** lớn hơn -> cảnh báo đầu phiên (ý từ project-template, 27/11)
+MAU_MOT_CHU_DE = re.compile(r"<!--\s*one-topic-justified:\s*\S")
 # Lỗi quyền thật trong transcript 26/11 (Permission denied, Errno 13, Access is denied) + mã của backend sandbox
 # (Seatbelt EPERM, Landlock EACCES, bwrap EROFS). Khớp nhầm lỗi quyền thường: lời nhắc sandbox thay
 # cho đếm ngắt mạch §7 ở lệnh đó (ponytail: đoán theo chữ, cần phân biệt chắc thì đọc mã thoát của sandbox).
@@ -93,13 +97,15 @@ VO_SHELL = {"bash", "sh", "cmd", "powershell", "pwsh"}
 CO_VO_SHELL = {"-c", "-command", "/c"}
 THONG_DICH = VO_SHELL | {"iex", "invoke-expression", "eval", "source", "xargs"}  # có mặt -> tham số lệnh dữ liệu cũng là lệnh
 # Cổng quy trình tắt được bằng HARNESS_TAT=a,b (để có nhánh «off» khi đo); bi-mat-*, pha-huy thì không.
-CONG_TAT_DUOC = ("superpowers", "doc-lon", "doc-lai", "ngu-canh", "xac-minh", "ban-giao", "bao-cao")
+CONG_TAT_DUOC = ("superpowers", "doc-lon", "doc-lai", "ngu-canh", "xac-minh", "ban-giao", "bao-cao", "tri-thuc")
 NHAN_BAO_CAO = ("ĐÃ KIỂM CHỨNG", "CHƯA KIỂM CHỨNG", "THẤT BẠI", "ĐÃ BỎ QUA", "GIẢ ĐỊNH", "CÔNG CỤ ĐÃ DÙNG")
 MAU_PIP = re.compile(r"\bpip3?(\.exe)?\s+install\b|-m\s+pip\s+install\b", _I)
 MAU_CO_VENV = re.compile(r"venv|conda|virtualenv|\buv\s+pip\b", _I)
 MAU_BI_MAT = (
     re.compile(r"(?i)\b(api[_-]?key|token|secret|password|passwd|pwd|bearer)(\s*[:=]\s*|\s+)['\"]?[^\s'\"]+"),
-    re.compile(r"\b(sk-[\w-]{16,}|ghp_\w{20,}|github_pat_\w{20,}|AKIA[0-9A-Z]{16}|xox[bp]-[\w-]{10,})"),
+    # [A-Z ]* thay cho .*: với .* thì chính dòng mẫu này cũng khớp và quet-commit chặn commit harness.py.
+    re.compile(r"\b(sk-[\w-]{16,}|ghp_\w{20,}|github_pat_\w{20,}|AKIA[0-9A-Z]{16}|xox[bp]-[\w-]{10,}"
+               r"|AIza[\w-]{35})|-----BEGIN [A-Z ]*PRIVATE KEY"),
 )
 
 
@@ -172,6 +178,13 @@ def doc_vet(sid):
     return ds
 
 
+def don_vet_cu():
+    han = datetime.now().timestamp() - GIU_VET_NGAY * 86400
+    for p in VET_PHIEN.glob("*.jsonl"):
+        if p.stat().st_mtime < han:
+            p.unlink(missing_ok=True)
+
+
 def ghi_vet(sid, ban_ghi):
     VET_PHIEN.mkdir(parents=True, exist_ok=True)
     with tep_vet(sid).open("a", encoding="utf-8") as f:
@@ -228,6 +241,12 @@ def thieu_ban_giao(goi):
         if r:
             (no.discard if MAU_BAN_GIAO.match(r[1]) else no.add)(r[0])
     return sorted(no)
+
+
+def la_tep_tri_thuc(p):
+    """AGENTS.md hoặc docs/knowledge/** trừ bàn giao (nhat_ky/, trang_thai.md): ghi xong phải báo «Tri thức mới:» (§13)."""
+    s = chuan_hoa(p).replace(os.sep, "/")
+    return "scratchpad" not in s and (s.endswith("/agents.md") or ("/docs/knowledge/" in s and not MAU_BAN_GIAO.search(s)))
 
 
 # ---------------------------------------------------------------- tầng 5: cổng quyền
@@ -319,6 +338,24 @@ def cong_quyen(vao):
         if ly_do:
             return quyet_dinh(vao, "pha-huy", "ask", f"[HARNESS §9] Lệnh thuộc nhóm DESTRUCTIVE ({', '.join(ly_do)}) — chỉ chạy khi người dùng duyệt đích danh lần này.")
     return False
+
+
+def quet_commit():
+    """githooks/pre-commit, chạy SAU `git add` của hook (nó chép settings.json, skills vào dot-claude/): dòng thêm
+    trong diff đã stage khớp MAU_BI_MAT[1] -> exit 2. Push không quét riêng: commit nào cũng đã qua đây."""
+    import subprocess
+    diff = subprocess.run(["git", "diff", "--cached", "--unified=0"], capture_output=True,
+                          encoding="utf-8", errors="replace").stdout
+    tep, trung = "", []
+    for d in diff.splitlines():
+        if d.startswith("+++ "):
+            tep = d[6:]  # "+++ b/<đường dẫn>"
+        elif d.startswith("+") and MAU_BI_MAT[1].search(d):
+            trung.append(f"  {tep}: {che_bi_mat(d[1:])[:90]}")
+    if trung:
+        sys.stderr.write("[HARNESS §10] Diff đã stage có dạng bí mật — chặn commit:\n" + "\n".join(trung)
+                         + "\nBỏ stage tệp đó, chuyển giá trị sang biến môi trường; khoá thật từng bị đẩy lên thì thu hồi trước.\n")
+        sys.exit(2)
 
 
 def cong_superpowers(vao):
@@ -635,7 +672,15 @@ def ket_phien(truoc_nen=False):
         if thieu_nhan:
             tk["bao_cao_luc"] = so_ghi
             thieu_nhan = ghi_cong(vao, "bao-cao", "block")
-    nhac = not (chan or repo_no or dung or thieu_nhan or tk["ban_giao_luc"]) and len(tep) > tk["so_tep_luc_nhac"]
+    # §13: ghi tệp tri thức mà tin cuối không báo «Tri thức mới:» -> giữ lượt, mỗi đợt ghi một lần.
+    tri_thuc = [b["tep"] for b in goi if b.get("tep") and la_tep_tri_thuc(b["tep"])]
+    tk["tri_thuc_luc"] = cu.get("tri_thuc_luc", 0)
+    thieu_tt = False
+    if not (chan or repo_no or dung) and len(tri_thuc) > tk["tri_thuc_luc"]:
+        tk["tri_thuc_luc"] = len(tri_thuc)
+        tin = vao.get("last_assistant_message") or tin_cuoi(vao.get("transcript_path", ""))
+        thieu_tt = bool(tin.strip()) and "Tri thức mới:" not in tin and ghi_cong(vao, "tri-thuc", "block")
+    nhac = not (chan or repo_no or dung or thieu_nhan or thieu_tt or tk["ban_giao_luc"]) and len(tep) > tk["so_tep_luc_nhac"]
     if nhac:
         tk["so_tep_luc_nhac"] = len(tep)
     VET_TONG_KET.mkdir(parents=True, exist_ok=True)
@@ -654,6 +699,10 @@ def ket_phien(truoc_nen=False):
         ly_do.append("[HARNESS §8] Đã ghi tệp dự án mà tin nhắn cuối không có nhãn báo cáo (ĐÃ KIỂM CHỨNG / CHƯA KIỂM "
                      "CHỨNG / THẤT BẠI / ĐÃ BỎ QUA / GIẢ ĐỊNH / CÔNG CỤ ĐÃ DÙNG). Viết báo cáo phân loại; đang hỏi "
                      "người dùng giữa chừng thì nói một câu rồi dừng — chỉ giữ một lần.")
+    if thieu_tt:
+        ten = ", ".join(dict.fromkeys(Path(p).name for p in tri_thuc[-3:]))
+        ly_do.append(f"[HARNESS §13] Đã ghi tệp tri thức ({ten}) mà tin nhắn cuối không báo. Thêm mỗi tệp một dòng "
+                     "`Tri thức mới: <tệp> — <điều học được>`; chỉ sửa câu chữ thì nói một câu rồi dừng — chỉ giữ một lần.")
     if ly_do:
         xuat({"decision": "block", "reason": " ".join(ly_do)})
     elif nhac:
@@ -716,6 +765,11 @@ def bo_nho_repo(goc):
         canh_bao.append("thiếu docs/knowledge/trang_thai.md")
     if not (goc / "AGENTS.md").is_file():
         canh_bao.append("thiếu AGENTS.md")
+    phinh = [p.relative_to(kn).as_posix() for p in sorted(kn.rglob("*.md")) if p.stat().st_size > NGUONG_TEP_TRI_THUC
+             and not MAU_MOT_CHU_DE.search("\n".join(p.read_text(encoding="utf-8", errors="replace").splitlines()[:15]))]
+    if phinh:
+        canh_bao.append(f"tệp tri thức > {NGUONG_TEP_TRI_THUC // 1024} KB: {', '.join(phinh[:5])} — mỗi tệp một chủ đề: tách "
+                        "phần thứ hai ra tệp riêng, hoặc khai `<!-- one-topic-justified: lý do -->` trong 15 dòng đầu")
     if canh_bao:
         dong.append(f"- ⚠️ §13: {'; '.join(canh_bao)}.")
     nk = sorted(p.name for p in (kn / "nhat_ky").glob("*.md") if p.name[:1].isdigit())
@@ -754,6 +808,7 @@ def lech_ban_cai(chep, goc):
 
 def bat_dau():
     vao = doc_dau_vao()
+    don_vet_cu()
     cwd = Path(vao.get("cwd") or ".")
     c, h = chuan_hoa(str(cwd.resolve())), chuan_hoa(str(HOP_DONG))
     # Dưới HOP_DONG thì CLAUDE.md (§1–16) đã nạp đủ — chèn thêm bản nhắc là trả hai lần mỗi lượt.
@@ -1164,6 +1219,12 @@ def tu_kiem_bat_buoc():
         bn = bo_nho_repo(tam / "r")
         assert "viec A" in "\n".join(bn) and len(bn) <= 15, bn
         assert any("6 KB" in d and "AGENTS.md" in d for d in bn), "thiếu cảnh báo trang_thai > 6 KB / thiếu AGENTS.md"
+        # Tệp tri thức > 20 KB -> cảnh báo, trừ khi 15 dòng đầu khai lý do một chủ đề.
+        (kn / "chu_de").mkdir()
+        (kn / "chu_de" / "phinh.md").write_text("z\n" * 11_000, encoding="utf-8")
+        (kn / "co_ly_do.md").write_text("# T\n<!-- one-topic-justified: một thuật toán -->\n" + "z\n" * 11_000, encoding="utf-8")
+        bn = "\n".join(bo_nho_repo(tam / "r"))
+        assert "phinh.md" in bn and "co_ly_do.md" not in bn, bn
         # Cổng qua hook thật.
         lenh = lambda c: {"tool_name": "Bash", "tool_input": {"command": c}}
         assert "ghi vào .env" in chay("canh-cong", **lenh("echo x > .env")), "sót ghi .env"
@@ -1205,6 +1266,17 @@ def tu_kiem_bat_buoc():
         assert chay("ket-phien", transcript_path=tin("ĐÃ KIỂM CHỨNG chạy x, đạt")) == "", "có nhãn §8 mà vẫn giữ lượt"
         assert "§8" in chay("ket-phien", transcript_path=tin("Xong rồi.")), "báo xong không nhãn §8 mà không giữ lượt"
         assert chay("ket-phien", transcript_path=tin("Xong rồi.")) == "", "giữ lượt §8 hai lần cho cùng đợt ghi"
+        # §13: ghi tệp tri thức (AGENTS.md, docs/knowledge/ trừ bàn giao) mà tin cuối thiếu «Tri thức mới:» -> giữ một lần.
+        for p in (str(goc_gia / "docs" / "knowledge" / "bay.md"), trang_thai):
+            chay("sau-cong-cu", **ghi(p))
+        chay("sau-cong-cu", **skill(SKILL_XAC_MINH))
+        chay("sau-cong-cu", **lenh("python -m pytest"))
+        assert "bay.md" in chay("ket-phien", transcript_path=tin("ĐÃ KIỂM CHỨNG x")), "ghi tri thức mà không báo vẫn qua"
+        assert chay("ket-phien", transcript_path=tin("ĐÃ KIỂM CHỨNG x")) == "", "giữ lượt tri thức hai lần"
+        chay("sau-cong-cu", **ghi(str(goc_gia / "AGENTS.md")))
+        assert "AGENTS.md" in chay("ket-phien", transcript_path=tin("Xong.")), "ghi AGENTS.md mà không báo vẫn qua"
+        chay("sau-cong-cu", **ghi(str(goc_gia / "AGENTS.md")))
+        assert chay("ket-phien", transcript_path=tin("Tri thức mới: AGENTS.md — bẫy x")) == "", "đã báo mà vẫn giữ"
         # Tổng kết tất định + `tim`.
         tx = tam / "transcript.jsonl"
         tx.write_text(json.dumps({"type": "user", "message": {"content": f"sửa giúp {sid} password=abc123"}}) + "\n"
@@ -1265,16 +1337,39 @@ def tu_kiem_bat_buoc():
         o = chay("bat-dau", cwd=str(tam), source="compact")
         assert "a.md" in o and "python hong.py" in o, "sau nén không chèn lại tệp đã ghi / lệnh hỏng của chính phiên"
         assert "a.md" not in chay("bat-dau", cwd=str(tam), source="startup"), "phiên mới chèn nhầm trạng thái của chính nó"
+        # Đầu phiên dọn vết cũ hơn GIU_VET_NGAY, không đụng vết còn mới (vết của chính phiên này).
+        vet_cu = VET_PHIEN / f"{sid}-cu.jsonl"
+        vet_cu.write_text("", encoding="utf-8")
+        xua = datetime.now().timestamp() - (GIU_VET_NGAY + 1) * 86400
+        os.utime(vet_cu, (xua, xua))
+        chay("bat-dau", cwd=str(tam), source="startup")
+        assert not vet_cu.exists(), "vết cũ hơn hạn giữ mà đầu phiên không dọn"
+        assert tep_vet(sid).exists(), "dọn nhầm vết còn mới của phiên đang chạy"
+        # pre-commit: dòng thêm đã stage chứa bí mật -> exit 2. Ghép chuỗi để chính tệp này không khớp mẫu.
+        kho = tam / "kho"
+        kho.mkdir()
+        git = lambda *ts: subprocess.run(["git", *ts], cwd=kho, capture_output=True, check=True)
+        quet_c = lambda: subprocess.run([sys.executable, __file__, "quet-commit"], cwd=kho, capture_output=True)
+        git("init", "-q")
+        (kho / "sach.py").write_text("x = 1\n", encoding="utf-8")
+        git("add", ".")
+        assert quet_c().returncode == 0, "diff sạch mà bị chặn"
+        for bi_mat in ("AIza" + "x" * 35, "sk-ant-" + "a" * 24, "-----BEGIN " + "RSA PRIVATE" + " KEY-----", "AKIA" + "B" * 16):
+            (kho / "lo.txt").write_text("a\n" + bi_mat + "\n", encoding="utf-8")
+            git("add", ".")
+            r = quet_c()
+            assert r.returncode == 2 and b"lo.txt" in r.stderr and bi_mat.encode() not in r.stderr, (bi_mat, r)
         print("tự kiểm bắt buộc: đạt.")
     finally:
         tep_vet(sid).unlink(missing_ok=True)
+        (VET_PHIEN / f"{sid}-cu.jsonl").unlink(missing_ok=True)
         shutil.rmtree(tam, ignore_errors=True)
         (VET_TONG_KET / f"{sid}.json").unlink(missing_ok=True)
 
 
 LENH = {"bat-dau": bat_dau, "canh-cong": canh_cong, "sau-cong-cu": sau_cong_cu,
         "ket-phien": ket_phien, "truoc-nen": lambda: ket_phien(truoc_nen=True), "quet": quet, "bao-cao": bao_cao, "do-cong": do_cong,
-        "chi-muc": chi_muc, "do-ton": do_ton, "tim": tim, "tu-kiem-bat-buoc": tu_kiem_bat_buoc}
+        "chi-muc": chi_muc, "do-ton": do_ton, "tim": tim, "tu-kiem-bat-buoc": tu_kiem_bat_buoc, "quet-commit": quet_commit}
 
 
 def main():

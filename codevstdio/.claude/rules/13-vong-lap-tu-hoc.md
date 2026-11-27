@@ -16,6 +16,9 @@ hay `AGENTS.md` đã tự nói; điều chỉ đúng trong phiên này.
 `AGENTS.md`. Diễn biến phiên → `docs/knowledge/nhat_ky/` (chỉ thêm). Trạng thái «mục nào xong, mục nào còn» →
 **một** tệp `docs/knowledge/trang_thai.md` (ghi đè cuối phiên; chứa con trỏ và tình trạng, không chép số liệu).
 
+**Báo ngay:** mỗi lần ghi tri thức (`AGENTS.md`, `docs/knowledge/` trừ `nhat_ky/` và `trang_thai.md`), viết trong
+chat một dòng `Tri thức mới: <tệp> — <điều học được>` — thiếu thì harness giữ lượt một lần.
+
 **Thang thăng cấp — để agent khôn dần mà luật không phình:** lỗi gặp lần đầu → nhật ký · gặp lại → một dòng
 bẫy trong `AGENTS.md` · gặp ở ≥ 2 repo → **đề xuất** thêm vào CLAUDE.md (không tự sửa khi chưa được lệnh) ·
 kiểm được bằng máy → **đề xuất** thành cảm biến / dây ngắt trong `~/.claude/harness/harness.py`, rồi rút câu

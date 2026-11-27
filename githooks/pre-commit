@@ -31,3 +31,6 @@ print(json.dumps({p: s for p, s in nguon.items() if s}, indent=2, ensure_ascii=F
 EOF
 
 git add codevstdio/CLAUDE.md dot-claude
+
+# Quét bí mật SAU git add: tệp vừa chép từ ~/.claude cũng nằm trong diff được quét.
+python -I harness.py quet-commit || exit 2
