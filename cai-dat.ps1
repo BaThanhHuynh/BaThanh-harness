@@ -25,6 +25,15 @@ else { Copy-Item "$Repo\codevstdio\CLAUDE.md" "$HopDong\CLAUDE.md"; Write-Host "
 
 Write-Host "3. Git hook đồng bộ"
 git -C $Repo config core.hooksPath githooks
+# Repo dự án: hook quét bí mật khi commit. Repo clone/init sau này tự nhận qua init.templateDir;
+# repo đã có thì `git init` lại chỉ thêm hook còn thiếu, không ghi đè hook sẵn có.
+if (-not (git config --global --get init.templateDir)) {
+    git config --global init.templateDir (("$ClaudeDir\harness\git-template") -replace '\\', '/')
+}
+Write-Host "  init.templateDir = $(git config --global --get init.templateDir)"
+foreach ($d in Get-ChildItem "$HopDong\repo" -Directory -ErrorAction SilentlyContinue) {
+    if (Test-Path "$($d.FullName)\.git") { git -C $d.FullName init -q; Write-Host "  hook: $($d.Name)" }
+}
 
 Write-Host "4. Skill tự cài"
 New-Item -ItemType Directory -Force "$ClaudeDir\skills" | Out-Null

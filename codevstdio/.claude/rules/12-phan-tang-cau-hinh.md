@@ -17,7 +17,7 @@ ngưỡng số liệu) → `AGENTS.md` thắng. `AGENTS.md` chỉ được làm 
 giải được: dừng và hỏi, kèm đề xuất sửa `AGENTS.md` cho khớp.
 
 Nội dung `AGENTS.md` do người dùng quyết; bắt buộc duy nhất là mục `INHERITANCE` trỏ về tệp này (mẫu:
-`docs/knowledge/agents-md-mau.md`). Repo chưa có `AGENTS.md` thì chỉ áp tệp này — đừng tự tạo.
+`~/.claude/harness/docs/agents-md-mau.md`). Repo chưa có `AGENTS.md` thì chỉ áp tệp này — đừng tự tạo.
 
 **Một nguồn cho mỗi sự thật:** bộ nhớ tự động chỉ chứa con trỏ («dự án X: đọc `AGENTS.md`»); số liệu đã chốt để
 dạng máy đọc (`docs/so_lieu_chot.json`). **Trần:** `AGENTS.md` dưới **12 KB** — nó nạp lại ở mọi lượt; vượt

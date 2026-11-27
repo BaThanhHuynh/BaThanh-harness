@@ -1,0 +1,4 @@
+#!/bin/sh
+# Harness §10: chặn commit khi diff đã stage có dạng bí mật (khoá API, token, khoá riêng).
+# Mẫu cho init.templateDir: git init / git clone tự chép vào .git/hooks của repo mới.
+exec python -I "$HOME/.claude/harness/harness.py" quet-commit
